@@ -1,3 +1,21 @@
+
+import { GameBoard } from "@/components/game/game-board";
+
 export default function Home() {
-  return <></>;
+  return (
+    <main className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 font-body">
+      <div className="text-center mb-6">
+        <h1 className="text-5xl font-bold text-primary font-headline tracking-tight">
+          WanderWorld 2D
+        </h1>
+        <p className="text-muted-foreground mt-2">A simple adventure awaits.</p>
+      </div>
+      <GameBoard />
+      <div className="mt-6 text-center text-muted-foreground text-sm space-y-1">
+        <p><strong className="text-foreground">Controls:</strong> Use Arrow Keys or WASD to move your character.</p>
+        <p><strong className="text-foreground">Objective:</strong> Collect the golden squares to increase your score.</p>
+        <p><strong className="text-foreground">Watch out!</strong> Avoid the red enemy, or your score will reset.</p>
+      </div>
+    </main>
+  );
 }
