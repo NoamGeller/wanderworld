@@ -78,15 +78,17 @@ export function GameBoard() {
     setTrapCount(0);
     setTrapPos(null);
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
-    setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-    setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
-  }, [GAME_WIDTH, GAME_HEIGHT]);
+    if (isMobile !== undefined) {
+      setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+      setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    }
+  }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
 
   const handlePlaceTrap = useCallback(() => {
     if (trapCount > 0 && !trapPos) {
         setTrapCount(c => c - 1);
         
-        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 1; // Distance from player center to trap center
+        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 5; // Distance from player center to trap center
 
         // Place trap in opposite direction of last movement
         const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
@@ -157,6 +159,7 @@ export function GameBoard() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
     const touch = e.changedTouches[0];
     if (joystickTouchId.current === null && touch) {
         joystickTouchId.current = touch.identifier;
@@ -166,6 +169,7 @@ export function GameBoard() {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
     if (joystickTouchId.current === null) return;
     const touch = Array.from(e.touches).find(t => t.identifier === joystickTouchId.current);
     if (touch) {
@@ -174,6 +178,7 @@ export function GameBoard() {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault();
     if (joystickTouchId.current === null) return;
     const touchEnded = Array.from(e.changedTouches).some(t => t.identifier === joystickTouchId.current);
     if (touchEnded) {
@@ -259,8 +264,8 @@ export function GameBoard() {
 
   // Collision detection effect
   useEffect(() => {
-    // Enemy position might be null on first render, so we check
-    if (!enemyPos) {
+    // Enemy and collectible might be null on first render, so we check
+    if (!enemyPos || !collectiblePos) {
       return;
     }
 
@@ -269,7 +274,7 @@ export function GameBoard() {
       return;
     }
 
-    if (collectiblePos && checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
+    if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
       setTrapCount(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
@@ -288,13 +293,18 @@ export function GameBoard() {
 
   // Initialize enemy and collectible positions on the client
   useEffect(() => {
+    if (isMobile === undefined) return;
     if (enemyPos === null) {
       setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [GAME_WIDTH, GAME_HEIGHT, enemyPos, collectiblePos]);
+  }, [GAME_WIDTH, GAME_HEIGHT, enemyPos, collectiblePos, isMobile]);
+
+  if (isMobile === undefined) {
+    return null;
+  }
 
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
@@ -389,7 +399,10 @@ export function GameBoard() {
                       e.preventDefault();
                       handlePlaceTrap();
                     }}
-                    onClick={handlePlaceTrap} // Fallback for non-touch devices like simulator
+                    onClick={(e) => { // Fallback for desktop testing
+                      e.preventDefault();
+                      handlePlaceTrap();
+                    }}
                     disabled={trapCount === 0 || !!trapPos}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
                     style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
