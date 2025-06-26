@@ -18,6 +18,7 @@ const TRAP_SIZE = 22;
 const PLAYER_SPEED = 3;
 const ENEMY_SPEED = 1.5;
 const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
+const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
 
 // Joystick Constants
 const JOYSTICK_AREA_HEIGHT = 120;
@@ -29,6 +30,11 @@ type Position = {
   x: number;
   y: number;
 };
+
+type Trap = {
+    pos: Position;
+    placedAt: number;
+}
 
 // Helper function for collision detection
 const checkCollision = (rect1: Position & { size: number }, rect2: Position & { size: number }) => {
@@ -58,7 +64,7 @@ export function GameBoard() {
   const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
   const [enemyPos, setEnemyPos] = useState<Position | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
-  const [trapPos, setTrapPos] = useState<Position | null>(null);
+  const [trap, setTrap] = useState<Trap | null>(null);
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
@@ -76,7 +82,7 @@ export function GameBoard() {
   const resetGame = useCallback(() => {
     setScore(0);
     setTrapCount(0);
-    setTrapPos(null);
+    setTrap(null);
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     if (isMobile !== undefined) {
       setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -85,18 +91,18 @@ export function GameBoard() {
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
 
   const handlePlaceTrap = useCallback(() => {
-    if (trapCount > 0 && !trapPos) {
+    if (trapCount > 0 && !trap) {
         setTrapCount(c => c - 1);
         
-        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 5; // Distance from player center to trap center
+        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 10; // Distance from player center to trap center
 
         // Place trap in opposite direction of last movement
         const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
         const trapY = (playerPos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
         
-        setTrapPos({ x: trapX, y: trapY });
+        setTrap({ pos: { x: trapX, y: trapY }, placedAt: Date.now() });
     }
-  }, [trapCount, trapPos, playerPos]);
+  }, [trapCount, trap, playerPos]);
 
   // Set/reset positions on dimension change
   useEffect(() => {
@@ -279,17 +285,20 @@ export function GameBoard() {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
     
-    if (trapPos) {
-      if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
+    if (trap) {
+      if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
         setScore(s => s + 1);
         setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-        setTrapPos(null);
-      } else if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
+        setTrap(null);
+      } else if (
+        checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...trap.pos, size: TRAP_SIZE }) &&
+        Date.now() - trap.placedAt > TRAP_PICKUP_COOLDOWN
+      ) {
         setTrapCount(c => c + 1);
-        setTrapPos(null);
+        setTrap(null);
       }
     }
-  }, [playerPos, enemyPos, collectiblePos, trapPos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
+  }, [playerPos, enemyPos, collectiblePos, trap, resetGame, GAME_WIDTH, GAME_HEIGHT]);
 
   // Initialize enemy and collectible positions on the client
   useEffect(() => {
@@ -351,15 +360,15 @@ export function GameBoard() {
               }}
             />
           )}
-          {trapPos && (
+          {trap && (
             <div
                 aria-label="Trap"
                 className="absolute bg-transparent border-2 border-dashed border-destructive/80 rounded-sm"
                 style={{
                     width: TRAP_SIZE,
                     height: TRAP_SIZE,
-                    left: trapPos.x,
-                    top: trapPos.y,
+                    left: trap.pos.x,
+                    top: trap.pos.y,
                 }}
             />
           )}
@@ -403,7 +412,7 @@ export function GameBoard() {
                       e.preventDefault();
                       handlePlaceTrap();
                     }}
-                    disabled={trapCount === 0 || !!trapPos}
+                    disabled={trapCount === 0 || !!trap}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
                     style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
                     aria-label="Place Trap"
@@ -427,3 +436,4 @@ export function GameBoard() {
     </Card>
   );
 }
+
