@@ -70,6 +70,7 @@ export function GameBoard() {
   const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 }); // translation from center
   const playerDirection = useRef<Position>({ x: 0, y: 0 });
   const joystickAreaRef = useRef<HTMLDivElement>(null);
+  const joystickTouchId = useRef<number | null>(null);
 
 
   const resetGame = useCallback(() => {
@@ -124,7 +125,7 @@ export function GameBoard() {
   }, [handlePlaceTrap]);
 
   // Joystick touch handlers
-  const updateHandle = (touch: React.Touch) => {
+  const updateHandle = (touch: { clientX: number, clientY: number }) => {
     if (!joystickAreaRef.current) return;
     const joystickCenter = {
       x: joystickAreaRef.current.offsetWidth / 2,
@@ -152,21 +153,31 @@ export function GameBoard() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length > 0) {
-      setIsDragging(true);
-      updateHandle(e.touches[0]);
+    const touch = e.changedTouches[0];
+    if (joystickTouchId.current === null && touch) {
+        joystickTouchId.current = touch.identifier;
+        setIsDragging(true);
+        updateHandle(touch);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length === 0) return;
-    updateHandle(e.touches[0]);
+    if (joystickTouchId.current === null) return;
+    const touch = Array.from(e.touches).find(t => t.identifier === joystickTouchId.current);
+    if (touch) {
+        updateHandle(touch);
+    }
   };
 
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    setHandlePos({ x: 0, y: 0 });
-    playerDirection.current = { x: 0, y: 0 };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (joystickTouchId.current === null) return;
+    const touchEnded = Array.from(e.changedTouches).some(t => t.identifier === joystickTouchId.current);
+    if (touchEnded) {
+        joystickTouchId.current = null;
+        setIsDragging(false);
+        setHandlePos({ x: 0, y: 0 });
+        playerDirection.current = { x: 0, y: 0 };
+    }
   };
 
   // Game loop
@@ -330,6 +341,7 @@ export function GameBoard() {
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchEnd}
                 >
                     <div
                         className="rounded-full bg-primary/20"
@@ -349,6 +361,10 @@ export function GameBoard() {
                     />
                 </div>
                 <button
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      handlePlaceTrap();
+                    }}
                     onClick={handlePlaceTrap}
                     disabled={trapCount === 0 || !!trapPos}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
