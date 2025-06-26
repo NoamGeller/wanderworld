@@ -321,12 +321,12 @@ export function GameBoard() {
         </div>
         {isMobile && (
             <div
-                className="flex items-center justify-around w-full select-none touch-none p-2"
+                className="flex items-center justify-around w-full select-none p-2"
                 style={{ height: JOYSTICK_AREA_HEIGHT, background: 'hsl(var(--card))' }}
             >
                 <div
                     ref={joystickAreaRef}
-                    className="relative flex items-center justify-center w-28 h-28"
+                    className="relative flex items-center justify-center w-28 h-28 touch-none"
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
