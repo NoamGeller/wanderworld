@@ -71,7 +71,7 @@ export function GameBoard() {
   const playerDirection = useRef<Position>({ x: 0, y: 0 });
   const joystickAreaRef = useRef<HTMLDivElement>(null);
   const joystickTouchId = useRef<number | null>(null);
-
+  const lastMoveDirection = useRef<Position>({ x: 0, y: -1 }); // Default to up
 
   const resetGame = useCallback(() => {
     setScore(0);
@@ -85,10 +85,14 @@ export function GameBoard() {
   const handlePlaceTrap = useCallback(() => {
     if (trapCount > 0 && !trapPos) {
         setTrapCount(c => c - 1);
-        setTrapPos({ 
-            x: playerPos.x + PLAYER_SIZE / 2 - TRAP_SIZE / 2, 
-            y: playerPos.y + PLAYER_SIZE / 2 - TRAP_SIZE / 2 
-        });
+        
+        const trapDistance = PLAYER_SIZE; // Distance from player center to trap center
+
+        // Place trap in opposite direction of last movement
+        const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
+        const trapY = (playerPos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
+        
+        setTrapPos({ x: trapX, y: trapY });
     }
   }, [trapCount, trapPos, playerPos]);
 
@@ -204,6 +208,10 @@ export function GameBoard() {
                 moveY /= magnitude;
             }
         }
+        
+        if (moveX !== 0 || moveY !== 0) {
+            lastMoveDirection.current = { x: moveX, y: moveY };
+        }
 
         x += moveX * PLAYER_SPEED;
         y += moveY * PLAYER_SPEED;
@@ -251,6 +259,7 @@ export function GameBoard() {
 
   // Collision detection effect
   useEffect(() => {
+    // Enemy position might be null on first render, so we check
     if (!enemyPos) {
       return;
     }
@@ -271,6 +280,12 @@ export function GameBoard() {
         setTrapPos(null);
     }
   }, [playerPos, enemyPos, collectiblePos, trapPos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
+
+  // Initialize enemy and collectible positions on the client
+  useEffect(() => {
+    setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
+  }, [GAME_WIDTH, GAME_HEIGHT]);
 
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
@@ -365,7 +380,7 @@ export function GameBoard() {
                       e.preventDefault();
                       handlePlaceTrap();
                     }}
-                    onClick={handlePlaceTrap}
+                    onClick={handlePlaceTrap} // Fallback for non-touch devices like simulator
                     disabled={trapCount === 0 || !!trapPos}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
                     style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
