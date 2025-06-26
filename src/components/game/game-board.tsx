@@ -40,8 +40,8 @@ const getRandomPosition = (size: number, width: number, height: number): Positio
 export function GameBoard() {
   const [score, setScore] = useState(0);
   const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
-  const [enemyPos, setEnemyPos] = useState<Position>(() => getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-  const [collectiblePos, setCollectiblePos] = useState<Position>(() => getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
+  const [enemyPos, setEnemyPos] = useState<Position | null>(null);
+  const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
@@ -52,6 +52,12 @@ export function GameBoard() {
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     setScore(0);
+  }, []);
+
+  // Set initial random positions only on the client
+  useEffect(() => {
+    setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
   }, []);
 
   // Keyboard input handler
@@ -87,6 +93,8 @@ export function GameBoard() {
       });
 
       setEnemyPos(prev => {
+        if (!prev) return null;
+
         if (enemyDirectionChangeCounter.current <= 0) {
           const angle = Math.random() * 2 * Math.PI;
           enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
@@ -122,6 +130,10 @@ export function GameBoard() {
 
   // Collision detection effect
   useEffect(() => {
+    if (!enemyPos || !collectiblePos) {
+      return;
+    }
+
     if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
       resetGame();
       return; // prevent checking collectible collision on same frame as death
@@ -154,27 +166,31 @@ export function GameBoard() {
               transition: 'left 60ms linear, top 60ms linear',
             }}
           />
-          <div
-            aria-label="Enemy"
-            className="absolute bg-destructive"
-            style={{
-              width: ENEMY_SIZE,
-              height: ENEMY_SIZE,
-              left: enemyPos.x,
-              top: enemyPos.y,
-              transition: 'left 60ms linear, top 60ms linear',
-            }}
-          />
-          <div
-            aria-label="Collectible"
-            className="absolute bg-accent"
-            style={{
-              width: COLLECTIBLE_SIZE,
-              height: COLLECTIBLE_SIZE,
-              left: collectiblePos.x,
-              top: collectiblePos.y,
-            }}
-          />
+          {enemyPos && (
+            <div
+              aria-label="Enemy"
+              className="absolute bg-destructive"
+              style={{
+                width: ENEMY_SIZE,
+                height: ENEMY_SIZE,
+                left: enemyPos.x,
+                top: enemyPos.y,
+                transition: 'left 60ms linear, top 60ms linear',
+              }}
+            />
+          )}
+          {collectiblePos && (
+            <div
+              aria-label="Collectible"
+              className="absolute bg-accent"
+              style={{
+                width: COLLECTIBLE_SIZE,
+                height: COLLECTIBLE_SIZE,
+                left: collectiblePos.x,
+                top: collectiblePos.y,
+              }}
+            />
+          )}
         </div>
       </CardContent>
     </Card>
