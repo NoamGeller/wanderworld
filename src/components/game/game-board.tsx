@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Game Constants
 const GAME_WIDTH = 500;
@@ -13,6 +14,11 @@ const COLLECTIBLE_SIZE = 15;
 const PLAYER_SPEED = 3;
 const ENEMY_SPEED = 1.5;
 const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
+
+// Joystick Constants
+const JOYSTICK_AREA_HEIGHT = 120;
+const JOYSTICK_BASE_RADIUS = 40;
+const JOYSTICK_HANDLE_RADIUS = 20;
 
 type Position = {
   x: number;
@@ -48,6 +54,14 @@ export function GameBoard() {
   const enemyDirectionChangeCounter = useRef(0);
   const animationFrameId = useRef<number>();
 
+  // Joystick state
+  const isMobile = useIsMobile();
+  const [isDragging, setIsDragging] = useState(false);
+  const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 }); // translation from center
+  const playerDirection = useRef<Position>({ x: 0, y: 0 });
+  const joystickAreaRef = useRef<HTMLDivElement>(null);
+
+
   const resetGame = useCallback(() => {
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -78,15 +92,78 @@ export function GameBoard() {
     };
   }, []);
 
+  // Joystick touch handlers
+  const updateHandle = (touch: React.Touch) => {
+    if (!joystickAreaRef.current) return;
+    const joystickCenter = {
+      x: joystickAreaRef.current.offsetWidth / 2,
+      y: joystickAreaRef.current.offsetHeight / 2,
+    };
+    const rect = joystickAreaRef.current.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    const dx = touchX - joystickCenter.x;
+    const dy = touchY - joystickCenter.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    const maxDistance = JOYSTICK_BASE_RADIUS;
+
+    if (distance > maxDistance) {
+      const x = (dx / distance) * maxDistance;
+      const y = (dy / distance) * maxDistance;
+      setHandlePos({ x, y });
+      playerDirection.current = { x: x / maxDistance, y: y / maxDistance };
+    } else {
+      setHandlePos({ x: dx, y: dy });
+      playerDirection.current = { x: dx / maxDistance, y: dy / maxDistance };
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    updateHandle(e.touches[0]);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    updateHandle(e.touches[0]);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    setHandlePos({ x: 0, y: 0 });
+    playerDirection.current = { x: 0, y: 0 };
+  };
+
   // Game loop
   useEffect(() => {
     const loop = () => {
       setPlayerPos(prev => {
         let { x, y } = prev;
-        if (keysPressed.current['arrowup'] || keysPressed.current['w']) y -= PLAYER_SPEED;
-        if (keysPressed.current['arrowdown'] || keysPressed.current['s']) y += PLAYER_SPEED;
-        if (keysPressed.current['arrowleft'] || keysPressed.current['a']) x -= PLAYER_SPEED;
-        if (keysPressed.current['arrowright'] || keysPressed.current['d']) x += PLAYER_SPEED;
+
+        let moveX = 0;
+        let moveY = 0;
+
+        if (isMobile) {
+            moveX = playerDirection.current.x;
+            moveY = playerDirection.current.y;
+        } else {
+            if (keysPressed.current['arrowup'] || keysPressed.current['w']) moveY -= 1;
+            if (keysPressed.current['arrowdown'] || keysPressed.current['s']) moveY += 1;
+            if (keysPressed.current['arrowleft'] || keysPressed.current['a']) moveX -= 1;
+            if (keysPressed.current['arrowright'] || keysPressed.current['d']) moveX += 1;
+
+            const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+            if (magnitude > 1) {
+                moveX /= magnitude;
+                moveY /= magnitude;
+            }
+        }
+
+        x += moveX * PLAYER_SPEED;
+        y += moveY * PLAYER_SPEED;
+
         x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, y));
         return { x, y };
@@ -109,13 +186,13 @@ export function GameBoard() {
 
         if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
         if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
-        
+
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
 
         return { x, y };
       });
-      
+
       animationFrameId.current = requestAnimationFrame(loop);
     };
 
@@ -126,7 +203,7 @@ export function GameBoard() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, []); // The loop runs once and uses functional updates.
+  }, [isMobile]);
 
   // Collision detection effect
   useEffect(() => {
@@ -138,7 +215,7 @@ export function GameBoard() {
       resetGame();
       return; // prevent checking collectible collision on same frame as death
     }
-    
+
     if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
       setScore(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -163,7 +240,6 @@ export function GameBoard() {
               height: PLAYER_SIZE,
               left: playerPos.x,
               top: playerPos.y,
-              transition: 'left 60ms linear, top 60ms linear',
             }}
           />
           {enemyPos && (
@@ -175,7 +251,6 @@ export function GameBoard() {
                 height: ENEMY_SIZE,
                 left: enemyPos.x,
                 top: enemyPos.y,
-                transition: 'left 60ms linear, top 60ms linear',
               }}
             />
           )}
@@ -192,6 +267,35 @@ export function GameBoard() {
             />
           )}
         </div>
+        {isMobile && (
+            <div
+                ref={joystickAreaRef}
+                className="relative flex items-center justify-center w-full select-none touch-none"
+                style={{ height: JOYSTICK_AREA_HEIGHT, background: 'hsl(var(--card))' }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+            >
+                {/* Base */}
+                <div
+                    className="rounded-full bg-primary/20"
+                    style={{
+                        width: JOYSTICK_BASE_RADIUS * 2,
+                        height: JOYSTICK_BASE_RADIUS * 2,
+                    }}
+                />
+                {/* Handle */}
+                <div
+                    className="absolute rounded-full bg-primary/50 cursor-pointer"
+                    style={{
+                        width: JOYSTICK_HANDLE_RADIUS * 2,
+                        height: JOYSTICK_HANDLE_RADIUS * 2,
+                        transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
+                        transition: isDragging ? 'none' : 'transform 100ms linear',
+                    }}
+                />
+            </div>
+        )}
       </CardContent>
     </Card>
   );
