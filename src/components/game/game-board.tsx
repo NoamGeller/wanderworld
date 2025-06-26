@@ -14,6 +14,7 @@ const MOBILE_GAME_HEIGHT = 420;
 const PLAYER_SIZE = 20;
 const ENEMY_SIZE = 20;
 const COLLECTIBLE_SIZE = 15;
+const TRAP_SIZE = 22;
 const PLAYER_SPEED = 3;
 const ENEMY_SPEED = 1.5;
 const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
@@ -22,6 +23,7 @@ const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
 const JOYSTICK_AREA_HEIGHT = 120;
 const JOYSTICK_BASE_RADIUS = 40;
 const JOYSTICK_HANDLE_RADIUS = 20;
+const ACTION_BUTTON_SIZE = 80;
 
 type Position = {
   x: number;
@@ -52,9 +54,11 @@ export function GameBoard() {
   const GAME_HEIGHT = isMobile ? MOBILE_GAME_HEIGHT : DESKTOP_GAME_HEIGHT;
 
   const [score, setScore] = useState(0);
+  const [trapCount, setTrapCount] = useState(0);
   const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
   const [enemyPos, setEnemyPos] = useState<Position | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
+  const [trapPos, setTrapPos] = useState<Position | null>(null);
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
@@ -69,26 +73,46 @@ export function GameBoard() {
 
 
   const resetGame = useCallback(() => {
-    setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
-    setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     setScore(0);
-  }, [GAME_WIDTH, GAME_HEIGHT]);
-
-  // Set/reset positions on dimension change
-  useEffect(() => {
+    setTrapCount(0);
+    setTrapPos(null);
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
   }, [GAME_WIDTH, GAME_HEIGHT]);
 
+  const handlePlaceTrap = useCallback(() => {
+    if (trapCount > 0 && !trapPos) {
+        setTrapCount(c => c - 1);
+        setTrapPos({ 
+            x: playerPos.x + PLAYER_SIZE / 2 - TRAP_SIZE / 2, 
+            y: playerPos.y + PLAYER_SIZE / 2 - TRAP_SIZE / 2 
+        });
+    }
+  }, [trapCount, trapPos, playerPos]);
+
+  // Set/reset positions on dimension change
+  useEffect(() => {
+    resetGame();
+  }, [GAME_WIDTH, GAME_HEIGHT, resetGame]);
+
   // Keyboard input handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
+      if (e.key === ' ') {
+          e.preventDefault();
+          handlePlaceTrap();
+          return;
+      }
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
+          e.preventDefault();
+      }
       keysPressed.current[e.key.toLowerCase()] = true;
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      e.preventDefault();
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
       keysPressed.current[e.key.toLowerCase()] = false;
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -97,7 +121,7 @@ export function GameBoard() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [handlePlaceTrap]);
 
   // Joystick touch handlers
   const updateHandle = (touch: React.Touch) => {
@@ -128,12 +152,14 @@ export function GameBoard() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setIsDragging(true);
-    updateHandle(e.touches[0]);
+    if (e.touches.length > 0) {
+      setIsDragging(true);
+      updateHandle(e.touches[0]);
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
+    if (!isDragging || e.touches.length === 0) return;
     updateHandle(e.touches[0]);
   };
 
@@ -214,26 +240,33 @@ export function GameBoard() {
 
   // Collision detection effect
   useEffect(() => {
-    if (!enemyPos || !collectiblePos) {
+    if (!enemyPos) {
       return;
     }
 
     if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
       resetGame();
-      return; // prevent checking collectible collision on same frame as death
+      return;
     }
 
-    if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
-      setScore(s => s + 1);
+    if (collectiblePos && checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
+      setTrapCount(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [playerPos, enemyPos, collectiblePos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
+    
+    if (trapPos && checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
+        setScore(s => s + 1);
+        setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+        setTrapPos(null);
+    }
+  }, [playerPos, enemyPos, collectiblePos, trapPos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
 
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
       <CardContent className="p-0">
         <div className="flex justify-between items-center bg-primary/10 p-2 border-b-2 border-primary/20">
           <h2 className="text-lg font-semibold text-primary font-sans">Score: {score}</h2>
+          <h2 className="text-lg font-semibold text-primary font-sans">Traps: {trapCount}</h2>
         </div>
         <div
           className="relative overflow-hidden"
@@ -273,34 +306,68 @@ export function GameBoard() {
               }}
             />
           )}
+          {trapPos && (
+            <div
+                aria-label="Trap"
+                className="absolute bg-transparent border-2 border-dashed border-destructive/80 rounded-sm"
+                style={{
+                    width: TRAP_SIZE,
+                    height: TRAP_SIZE,
+                    left: trapPos.x,
+                    top: trapPos.y,
+                }}
+            />
+          )}
         </div>
         {isMobile && (
             <div
-                ref={joystickAreaRef}
-                className="relative flex items-center justify-center w-full select-none touch-none"
+                className="flex items-center justify-around w-full select-none touch-none p-2"
                 style={{ height: JOYSTICK_AREA_HEIGHT, background: 'hsl(var(--card))' }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
             >
-                {/* Base */}
                 <div
-                    className="rounded-full bg-primary/20"
-                    style={{
-                        width: JOYSTICK_BASE_RADIUS * 2,
-                        height: JOYSTICK_BASE_RADIUS * 2,
-                    }}
-                />
-                {/* Handle */}
-                <div
-                    className="absolute rounded-full bg-primary/50 cursor-pointer"
-                    style={{
-                        width: JOYSTICK_HANDLE_RADIUS * 2,
-                        height: JOYSTICK_HANDLE_RADIUS * 2,
-                        transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
-                        transition: isDragging ? 'none' : 'transform 100ms linear',
-                    }}
-                />
+                    ref={joystickAreaRef}
+                    className="relative flex items-center justify-center w-28 h-28"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    <div
+                        className="rounded-full bg-primary/20"
+                        style={{
+                            width: JOYSTICK_BASE_RADIUS * 2,
+                            height: JOYSTICK_BASE_RADIUS * 2,
+                        }}
+                    />
+                    <div
+                        className="absolute rounded-full bg-primary/50 cursor-pointer"
+                        style={{
+                            width: JOYSTICK_HANDLE_RADIUS * 2,
+                            height: JOYSTICK_HANDLE_RADIUS * 2,
+                            transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
+                            transition: isDragging ? 'none' : 'transform 100ms linear',
+                        }}
+                    />
+                </div>
+                <button
+                    onClick={handlePlaceTrap}
+                    disabled={trapCount === 0 || !!trapPos}
+                    className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
+                    style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
+                    aria-label="Place Trap"
+                >
+                    <div
+                        className="bg-accent rounded-sm"
+                        style={{
+                            width: COLLECTIBLE_SIZE * 1.5,
+                            height: COLLECTIBLE_SIZE * 1.5,
+                        }}
+                    />
+                    {trapCount > 0 && (
+                        <span className="absolute -top-1 -left-1 flex items-center justify-center w-7 h-7 text-sm font-bold text-primary-foreground bg-primary rounded-full border-2 border-card">
+                            {trapCount}
+                        </span>
+                    )}
+                </button>
             </div>
         )}
       </CardContent>
