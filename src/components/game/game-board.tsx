@@ -6,8 +6,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 // Game Constants
-const GAME_WIDTH = 500;
-const GAME_HEIGHT = 400;
+const DESKTOP_GAME_WIDTH = 500;
+const DESKTOP_GAME_HEIGHT = 400;
+const MOBILE_GAME_WIDTH = 340;
+const MOBILE_GAME_HEIGHT = 420;
+
 const PLAYER_SIZE = 20;
 const ENEMY_SIZE = 20;
 const COLLECTIBLE_SIZE = 15;
@@ -44,6 +47,10 @@ const getRandomPosition = (size: number, width: number, height: number): Positio
 };
 
 export function GameBoard() {
+  const isMobile = useIsMobile();
+  const GAME_WIDTH = isMobile ? MOBILE_GAME_WIDTH : DESKTOP_GAME_WIDTH;
+  const GAME_HEIGHT = isMobile ? MOBILE_GAME_HEIGHT : DESKTOP_GAME_HEIGHT;
+
   const [score, setScore] = useState(0);
   const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
   const [enemyPos, setEnemyPos] = useState<Position | null>(null);
@@ -55,7 +62,6 @@ export function GameBoard() {
   const animationFrameId = useRef<number>();
 
   // Joystick state
-  const isMobile = useIsMobile();
   const [isDragging, setIsDragging] = useState(false);
   const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 }); // translation from center
   const playerDirection = useRef<Position>({ x: 0, y: 0 });
@@ -66,13 +72,14 @@ export function GameBoard() {
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     setScore(0);
-  }, []);
+  }, [GAME_WIDTH, GAME_HEIGHT]);
 
-  // Set initial random positions only on the client
+  // Set/reset positions on dimension change
   useEffect(() => {
+    setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
     setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
-  }, []);
+  }, [GAME_WIDTH, GAME_HEIGHT]);
 
   // Keyboard input handler
   useEffect(() => {
@@ -203,7 +210,7 @@ export function GameBoard() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isMobile]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT]);
 
   // Collision detection effect
   useEffect(() => {
@@ -220,7 +227,7 @@ export function GameBoard() {
       setScore(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [playerPos, enemyPos, collectiblePos, resetGame]);
+  }, [playerPos, enemyPos, collectiblePos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
 
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
