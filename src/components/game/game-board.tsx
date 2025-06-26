@@ -86,7 +86,7 @@ export function GameBoard() {
     if (trapCount > 0 && !trapPos) {
         setTrapCount(c => c - 1);
         
-        const trapDistance = PLAYER_SIZE; // Distance from player center to trap center
+        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 1; // Distance from player center to trap center
 
         // Place trap in opposite direction of last movement
         const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
@@ -288,9 +288,13 @@ export function GameBoard() {
 
   // Initialize enemy and collectible positions on the client
   useEffect(() => {
-    setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-    setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
-  }, [GAME_WIDTH, GAME_HEIGHT]);
+    if (enemyPos === null) {
+      setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    }
+    if (collectiblePos === null) {
+      setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    }
+  }, [GAME_WIDTH, GAME_HEIGHT, enemyPos, collectiblePos]);
 
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
