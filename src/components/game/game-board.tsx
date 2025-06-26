@@ -274,10 +274,15 @@ export function GameBoard() {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
     
-    if (trapPos && checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
+    if (trapPos) {
+      if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
         setScore(s => s + 1);
         setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
         setTrapPos(null);
+      } else if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...trapPos, size: TRAP_SIZE })) {
+        setTrapCount(c => c + 1);
+        setTrapPos(null);
+      }
     }
   }, [playerPos, enemyPos, collectiblePos, trapPos, resetGame, GAME_WIDTH, GAME_HEIGHT]);
 
