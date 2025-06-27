@@ -328,7 +328,7 @@ export function GameBoard() {
         >
           <div
             aria-label="Player"
-            className="absolute bg-primary"
+            className="absolute bg-primary rounded-full"
             style={{
               width: PLAYER_SIZE,
               height: PLAYER_SIZE,
@@ -339,7 +339,7 @@ export function GameBoard() {
           {enemyPos && (
             <div
               aria-label="Enemy"
-              className="absolute bg-destructive"
+              className="absolute bg-destructive rounded-full"
               style={{
                 width: ENEMY_SIZE,
                 height: ENEMY_SIZE,
@@ -351,7 +351,7 @@ export function GameBoard() {
           {collectiblePos && (
             <div
               aria-label="Collectible"
-              className="absolute bg-accent"
+              className="absolute bg-accent rounded-full"
               style={{
                 width: COLLECTIBLE_SIZE,
                 height: COLLECTIBLE_SIZE,
@@ -363,7 +363,7 @@ export function GameBoard() {
           {trap && (
             <div
                 aria-label="Trap"
-                className="absolute bg-transparent border-2 border-dashed border-destructive/80 rounded-sm"
+                className="absolute bg-transparent border-2 border-dashed border-destructive/80 rounded-full"
                 style={{
                     width: TRAP_SIZE,
                     height: TRAP_SIZE,
@@ -418,7 +418,7 @@ export function GameBoard() {
                     aria-label="Place Trap"
                 >
                     <div
-                        className="bg-accent rounded-sm"
+                        className="bg-accent rounded-full"
                         style={{
                             width: COLLECTIBLE_SIZE * 1.5,
                             height: COLLECTIBLE_SIZE * 1.5,
@@ -436,4 +436,3 @@ export function GameBoard() {
     </Card>
   );
 }
-
