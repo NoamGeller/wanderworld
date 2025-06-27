@@ -15,8 +15,10 @@ const PLAYER_SIZE = 20;
 const ENEMY_SIZE = 20;
 const COLLECTIBLE_SIZE = 15;
 const TRAP_SIZE = 22;
+const ALLY_SIZE = 20;
 const PLAYER_SPEED = 3;
 const ENEMY_SPEED = 1.5;
+const ALLY_SPEED = 2.5;
 const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
 const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
 
@@ -65,24 +67,29 @@ export function GameBoard() {
   const [enemyPos, setEnemyPos] = useState<Position | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
+  const [allyPos, setAllyPos] = useState<Position | null>(null);
+  const [allyAvailable, setAllyAvailable] = useState(false);
+  const [allyAwarded, setAllyAwarded] = useState(false);
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
   const enemyDirectionChangeCounter = useRef(0);
   const animationFrameId = useRef<number>();
 
-  // Joystick state
   const [isDragging, setIsDragging] = useState(false);
-  const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 }); // translation from center
+  const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 });
   const playerDirection = useRef<Position>({ x: 0, y: 0 });
   const joystickAreaRef = useRef<HTMLDivElement>(null);
   const joystickTouchId = useRef<number | null>(null);
-  const lastMoveDirection = useRef<Position>({ x: 0, y: -1 }); // Default to up
+  const lastMoveDirection = useRef<Position>({ x: 0, y: -1 });
 
   const resetGame = useCallback(() => {
     setScore(0);
     setTrapCount(0);
     setTrap(null);
+    setAllyPos(null);
+    setAllyAvailable(false);
+    setAllyAwarded(false);
     setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
     if (isMobile !== undefined) {
       setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -93,29 +100,38 @@ export function GameBoard() {
   const handlePlaceTrap = useCallback(() => {
     if (trapCount > 0 && !trap) {
         setTrapCount(c => c - 1);
-        
-        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 10; // Distance from player center to trap center
-
-        // Place trap in opposite direction of last movement
+        const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 10;
         const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
         const trapY = (playerPos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
-        
         setTrap({ pos: { x: trapX, y: trapY }, placedAt: Date.now() });
     }
   }, [trapCount, trap, playerPos]);
 
-  // Set/reset positions on dimension change
+  const handleSpawnAlly = useCallback(() => {
+    if (allyAvailable && !allyPos) {
+      setAllyAvailable(false);
+      const allyDistance = PLAYER_SIZE / 2 + ALLY_SIZE / 2 + 5;
+      const allyX = (playerPos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
+      const allyY = (playerPos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
+      setAllyPos({ x: allyX, y: allyY });
+    }
+  }, [allyAvailable, allyPos, playerPos.x, playerPos.y]);
+
   useEffect(() => {
     resetGame();
   }, [GAME_WIDTH, GAME_HEIGHT, resetGame]);
 
-  // Keyboard input handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === ' ') {
           e.preventDefault();
           handlePlaceTrap();
           return;
+      }
+      if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        handleSpawnAlly();
+        return;
       }
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
           e.preventDefault();
@@ -134,9 +150,8 @@ export function GameBoard() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handlePlaceTrap]);
+  }, [handlePlaceTrap, handleSpawnAlly]);
 
-  // Joystick touch handlers
   const updateHandle = (touch: { clientX: number, clientY: number }) => {
     if (!joystickAreaRef.current) return;
     const joystickCenter = {
@@ -150,7 +165,6 @@ export function GameBoard() {
     const dx = touchX - joystickCenter.x;
     const dy = touchY - joystickCenter.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-
     const maxDistance = JOYSTICK_BASE_RADIUS;
 
     if (distance > maxDistance) {
@@ -195,15 +209,12 @@ export function GameBoard() {
     }
   };
 
-  // Game loop
   useEffect(() => {
     const loop = () => {
       setPlayerPos(prev => {
         let { x, y } = prev;
-
         let moveX = 0;
         let moveY = 0;
-
         if (isMobile) {
             moveX = playerDirection.current.x;
             moveY = playerDirection.current.y;
@@ -219,14 +230,11 @@ export function GameBoard() {
                 moveY /= magnitude;
             }
         }
-        
         if (moveX !== 0 || moveY !== 0) {
             lastMoveDirection.current = { x: moveX, y: moveY };
         }
-
         x += moveX * PLAYER_SPEED;
         y += moveY * PLAYER_SPEED;
-
         x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, y));
         return { x, y };
@@ -234,7 +242,6 @@ export function GameBoard() {
 
       setEnemyPos(prev => {
         if (!prev) return null;
-
         if (enemyDirectionChangeCounter.current <= 0) {
           const angle = Math.random() * 2 * Math.PI;
           enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
@@ -242,52 +249,63 @@ export function GameBoard() {
         } else {
           enemyDirectionChangeCounter.current--;
         }
-
         let { x, y } = prev;
         x += enemyDirection.current.x * ENEMY_SPEED;
         y += enemyDirection.current.y * ENEMY_SPEED;
-
         if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
         if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
-
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
+        return { x, y };
+      });
 
+      setAllyPos(prevAllyPos => {
+        if (!prevAllyPos || !enemyPos) return prevAllyPos;
+        const dx = enemyPos.x - prevAllyPos.x;
+        const dy = enemyPos.y - prevAllyPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < 1) {
+            return prevAllyPos;
+        }
+        const moveX = (dx / distance) * ALLY_SPEED;
+        const moveY = (dy / distance) * ALLY_SPEED;
+        let { x, y } = prevAllyPos;
+        x += moveX;
+        y += moveY;
+        x = Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, x));
+        y = Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, y));
         return { x, y };
       });
 
       animationFrameId.current = requestAnimationFrame(loop);
     };
-
     animationFrameId.current = requestAnimationFrame(loop);
-
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemyPos]);
 
-  // Collision detection effect
   useEffect(() => {
-    // Enemy and collectible might be null on first render, so we check
     if (!enemyPos || !collectiblePos) {
       return;
     }
-
     if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
       resetGame();
       return;
     }
-
     if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
       setTrapCount(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-    
     if (trap) {
       if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
         setScore(s => s + 1);
+        if (!allyAwarded) {
+          setAllyAwarded(true);
+          setAllyAvailable(true);
+        }
         setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
         setTrap(null);
       } else if (
@@ -298,9 +316,14 @@ export function GameBoard() {
         setTrap(null);
       }
     }
-  }, [playerPos, enemyPos, collectiblePos, trap, resetGame, GAME_WIDTH, GAME_HEIGHT]);
+    if (allyPos && checkCollision({ ...allyPos, size: ALLY_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
+        setScore(s => s + 1);
+        setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+        setAllyPos(null);
+        return;
+    }
+  }, [playerPos, enemyPos, collectiblePos, trap, resetGame, GAME_WIDTH, GAME_HEIGHT, allyPos, allyAwarded]);
 
-  // Initialize enemy and collectible positions on the client
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemyPos === null) {
@@ -372,6 +395,18 @@ export function GameBoard() {
                 }}
             />
           )}
+          {allyPos && (
+            <div
+                aria-label="Ally"
+                className="absolute bg-secondary rounded-full"
+                style={{
+                    width: ALLY_SIZE,
+                    height: ALLY_SIZE,
+                    left: allyPos.x,
+                    top: allyPos.y,
+                }}
+            />
+          )}
         </div>
         {isMobile && (
             <div
@@ -408,7 +443,7 @@ export function GameBoard() {
                       e.preventDefault();
                       handlePlaceTrap();
                     }}
-                    onClick={(e) => { // Fallback for desktop testing
+                    onClick={(e) => {
                       e.preventDefault();
                       handlePlaceTrap();
                     }}
@@ -428,6 +463,30 @@ export function GameBoard() {
                         <span className="absolute -top-1 -left-1 flex items-center justify-center w-7 h-7 text-sm font-bold text-primary-foreground bg-primary rounded-full border-2 border-card">
                             {trapCount}
                         </span>
+                    )}
+                </button>
+                <button
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      handleSpawnAlly();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSpawnAlly();
+                    }}
+                    disabled={!allyAvailable || !!allyPos}
+                    className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
+                    style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
+                    aria-label="Spawn Ally"
+                >
+                    {allyAvailable && (
+                        <div
+                            className="bg-destructive rounded-full"
+                            style={{
+                                width: ENEMY_SIZE * 1.5,
+                                height: ENEMY_SIZE * 1.5,
+                            }}
+                        />
                     )}
                 </button>
             </div>
