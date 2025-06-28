@@ -398,7 +398,7 @@ export function GameBoard() {
           {allyPos && (
             <div
                 aria-label="Ally"
-                className="absolute bg-secondary rounded-full"
+                className="absolute bg-[hsl(var(--chart-2))] rounded-full"
                 style={{
                     width: ALLY_SIZE,
                     height: ALLY_SIZE,
@@ -415,21 +415,21 @@ export function GameBoard() {
             >
                 <div
                     ref={joystickAreaRef}
-                    className="relative flex items-center justify-center w-28 h-28 touch-none"
+                    className="relative flex items-center justify-center w-28 h-28"
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                     onTouchCancel={handleTouchEnd}
                 >
                     <div
-                        className="rounded-full bg-primary/20"
+                        className="rounded-full bg-primary/20 touch-none"
                         style={{
                             width: JOYSTICK_BASE_RADIUS * 2,
                             height: JOYSTICK_BASE_RADIUS * 2,
                         }}
                     />
                     <div
-                        className="absolute rounded-full bg-primary/50 cursor-pointer"
+                        className="absolute rounded-full bg-primary/50 cursor-pointer touch-none"
                         style={{
                             width: JOYSTICK_HANDLE_RADIUS * 2,
                             height: JOYSTICK_HANDLE_RADIUS * 2,
@@ -481,10 +481,10 @@ export function GameBoard() {
                 >
                     {allyAvailable && (
                         <div
-                            className="bg-destructive rounded-full"
+                            className="bg-[hsl(var(--chart-2))] rounded-full"
                             style={{
-                                width: ENEMY_SIZE * 1.5,
-                                height: ENEMY_SIZE * 1.5,
+                                width: ALLY_SIZE * 1.5,
+                                height: ALLY_SIZE * 1.5,
                             }}
                         />
                     )}
