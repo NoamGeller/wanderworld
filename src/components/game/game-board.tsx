@@ -61,7 +61,8 @@ export function GameBoard() {
   const GAME_WIDTH = isMobile ? MOBILE_GAME_WIDTH : DESKTOP_GAME_WIDTH;
   const GAME_HEIGHT = isMobile ? MOBILE_GAME_HEIGHT : DESKTOP_GAME_HEIGHT;
 
-  const [score, setScore] = useState(0);
+  const [trapScore, setTrapScore] = useState(0);
+  const [allyScore, setAllyScore] = useState(0);
   const [trapCount, setTrapCount] = useState(0);
   const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
   const [enemyPos, setEnemyPos] = useState<Position | null>(null);
@@ -84,7 +85,8 @@ export function GameBoard() {
   const lastMoveDirection = useRef<Position>({ x: 0, y: -1 });
 
   const resetGame = useCallback(() => {
-    setScore(0);
+    setTrapScore(0);
+    setAllyScore(0);
     setTrapCount(0);
     setTrap(null);
     setAllyPos(null);
@@ -301,7 +303,7 @@ export function GameBoard() {
     }
     if (trap) {
       if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
-        setScore(s => s + 1);
+        setTrapScore(s => s + 1);
         if (!allyAwarded) {
           setAllyAwarded(true);
           setAllyAvailable(true);
@@ -317,7 +319,7 @@ export function GameBoard() {
       }
     }
     if (allyPos && checkCollision({ ...allyPos, size: ALLY_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
-        setScore(s => s + 1);
+        setAllyScore(s => s + 1);
         setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
         setAllyPos(null);
         return;
@@ -341,9 +343,10 @@ export function GameBoard() {
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
       <CardContent className="p-0">
-        <div className="flex justify-between items-center bg-primary/10 p-2 border-b-2 border-primary/20">
-          <h2 className="text-lg font-semibold text-primary font-sans">Score: {score}</h2>
-          <h2 className="text-lg font-semibold text-primary font-sans">Traps: {trapCount}</h2>
+        <div className="grid grid-cols-3 gap-2 items-center bg-primary/10 p-2 border-b-2 border-primary/20 text-center">
+          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapScore}</h2>
+          <h2 className="text-base font-semibold text-primary font-sans">Ally XP: {allyScore}</h2>
+          <h2 className="text-base font-semibold text-primary font-sans">Traps: {trapCount}</h2>
         </div>
         <div
           className="relative overflow-hidden"

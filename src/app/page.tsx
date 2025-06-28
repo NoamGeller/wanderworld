@@ -12,10 +12,10 @@ export default function Home() {
       </div>
       <GameBoard />
       <div className="mt-6 text-center text-muted-foreground text-sm space-y-1">
-        <p><strong className="text-foreground">Objective:</strong> Collect golden circles to get traps. Use traps to defeat enemies, score points, and gain a powerful ally!</p>
+        <p><strong className="text-foreground">Objective:</strong> Collect golden circles to get traps. Use traps or your ally to defeat enemies and gain experience points!</p>
         <p><strong className="text-foreground">Desktop Controls:</strong> Use Arrow Keys or WASD to move. Press Spacebar to place a trap and 'E' to spawn your ally.</p>
         <p><strong className="text-foreground">Mobile Controls:</strong> Use the joystick to move and the buttons to use your items.</p>
-        <p><strong className="text-foreground">Watch out!</strong> Avoid the red enemy, or your score will reset.</p>
+        <p><strong className="text-foreground">Watch out!</strong> Avoid the red enemy, or your experience and items will reset.</p>
       </div>
     </main>
   );
