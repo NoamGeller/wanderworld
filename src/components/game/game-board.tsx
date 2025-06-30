@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Heart } from 'lucide-react';
 
 // Game Constants
 const DESKTOP_GAME_WIDTH = 500;
@@ -21,6 +22,8 @@ const ENEMY_SPEED = 1.5;
 const ALLY_SPEED = 2.5;
 const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
 const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
+const HEALTH_START = 3;
+const HIT_COOLDOWN = 1000; // in milliseconds
 
 // Joystick Constants
 const JOYSTICK_AREA_HEIGHT = 120;
@@ -33,10 +36,15 @@ type Position = {
   y: number;
 };
 
+type Character = {
+  pos: Position;
+  health: number;
+};
+
 type Trap = {
     pos: Position;
     placedAt: number;
-}
+};
 
 // Helper function for collision detection
 const checkCollision = (rect1: Position & { size: number }, rect2: Position & { size: number }) => {
@@ -64,11 +72,11 @@ export function GameBoard() {
   const [trapScore, setTrapScore] = useState(0);
   const [allyScore, setAllyScore] = useState(0);
   const [trapCount, setTrapCount] = useState(0);
-  const [playerPos, setPlayerPos] = useState<Position>({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
-  const [enemyPos, setEnemyPos] = useState<Position | null>(null);
+  const [player, setPlayer] = useState<Character>({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START });
+  const [enemy, setEnemy] = useState<Character | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
-  const [allyPos, setAllyPos] = useState<Position | null>(null);
+  const [ally, setAlly] = useState<Character | null>(null);
   const [allyAvailable, setAllyAvailable] = useState(false);
   const [allyAwarded, setAllyAwarded] = useState(false);
 
@@ -76,6 +84,8 @@ export function GameBoard() {
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
   const enemyDirectionChangeCounter = useRef(0);
   const animationFrameId = useRef<number>();
+  const playerHitCooldown = useRef(false);
+  const allyHitCooldown = useRef(false);
 
   const [isDragging, setIsDragging] = useState(false);
   const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 });
@@ -89,12 +99,12 @@ export function GameBoard() {
     setAllyScore(0);
     setTrapCount(0);
     setTrap(null);
-    setAllyPos(null);
+    setAlly(null);
     setAllyAvailable(false);
     setAllyAwarded(false);
-    setPlayerPos({ x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 });
+    setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START });
     if (isMobile !== undefined) {
-      setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
@@ -103,21 +113,21 @@ export function GameBoard() {
     if (trapCount > 0 && !trap) {
         setTrapCount(c => c - 1);
         const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 10;
-        const trapX = (playerPos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
-        const trapY = (playerPos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
+        const trapX = (player.pos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
+        const trapY = (player.pos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
         setTrap({ pos: { x: trapX, y: trapY }, placedAt: Date.now() });
     }
-  }, [trapCount, trap, playerPos]);
+  }, [trapCount, trap, player.pos]);
 
   const handleSpawnAlly = useCallback(() => {
-    if (allyAvailable && !allyPos) {
+    if (allyAvailable && !ally) {
       setAllyAvailable(false);
       const allyDistance = PLAYER_SIZE / 2 + ALLY_SIZE / 2 + 5;
-      const allyX = (playerPos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
-      const allyY = (playerPos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
-      setAllyPos({ x: allyX, y: allyY });
+      const allyX = (player.pos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
+      const allyY = (player.pos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
+      setAlly({ pos: { x: allyX, y: allyY }, health: HEALTH_START });
     }
-  }, [allyAvailable, allyPos, playerPos.x, playerPos.y]);
+  }, [allyAvailable, ally, player.pos]);
 
   useEffect(() => {
     resetGame();
@@ -213,8 +223,10 @@ export function GameBoard() {
 
   useEffect(() => {
     const loop = () => {
-      setPlayerPos(prev => {
-        let { x, y } = prev;
+      setPlayer(prev => {
+        let { pos, health } = prev;
+        let x = pos.x;
+        let y = pos.y;
         let moveX = 0;
         let moveY = 0;
         if (isMobile) {
@@ -239,10 +251,10 @@ export function GameBoard() {
         y += moveY * PLAYER_SPEED;
         x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, y));
-        return { x, y };
+        return { pos: { x, y }, health };
       });
 
-      setEnemyPos(prev => {
+      setEnemy(prev => {
         if (!prev) return null;
         if (enemyDirectionChangeCounter.current <= 0) {
           const angle = Math.random() * 2 * Math.PI;
@@ -251,32 +263,36 @@ export function GameBoard() {
         } else {
           enemyDirectionChangeCounter.current--;
         }
-        let { x, y } = prev;
+        let { pos, health } = prev;
+        let x = pos.x;
+        let y = pos.y;
         x += enemyDirection.current.x * ENEMY_SPEED;
         y += enemyDirection.current.y * ENEMY_SPEED;
         if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
         if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-        return { x, y };
+        return { pos: {x, y}, health };
       });
 
-      setAllyPos(prevAllyPos => {
-        if (!prevAllyPos || !enemyPos) return prevAllyPos;
-        const dx = enemyPos.x - prevAllyPos.x;
-        const dy = enemyPos.y - prevAllyPos.y;
+      setAlly(prevAlly => {
+        if (!prevAlly || !enemy) return prevAlly;
+        const dx = enemy.pos.x - prevAlly.pos.x;
+        const dy = enemy.pos.y - prevAlly.pos.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < 1) {
-            return prevAllyPos;
+            return prevAlly;
         }
         const moveX = (dx / distance) * ALLY_SPEED;
         const moveY = (dy / distance) * ALLY_SPEED;
-        let { x, y } = prevAllyPos;
+        let { pos, health } = prevAlly;
+        let x = pos.x;
+        let y = pos.y;
         x += moveX;
         y += moveY;
         x = Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, y));
-        return { x, y };
+        return { pos: {x, y}, health };
       });
 
       animationFrameId.current = requestAnimationFrame(loop);
@@ -287,54 +303,77 @@ export function GameBoard() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemyPos]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy]);
 
   useEffect(() => {
-    if (!enemyPos || !collectiblePos) {
+    if (!enemy || !collectiblePos) return;
+
+    // Trap collision (instant kill)
+    if (trap && checkCollision({ ...enemy.pos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
+      setTrapScore(s => s + 1);
+      if (!allyAwarded) {
+        setAllyAwarded(true);
+        setAllyAvailable(true);
+      }
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      setTrap(null);
       return;
     }
-    if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
+
+    // Player vs Enemy combat
+    if (checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
+      if (!playerHitCooldown.current) {
+        playerHitCooldown.current = true;
+        setPlayer(p => ({ ...p, health: p.health - 1 }));
+        setEnemy(e => e ? ({ ...e, health: e.health - 1 }) : null);
+        setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
+      }
+    }
+
+    // Ally vs Enemy combat
+    if (ally && checkCollision({ ...ally.pos, size: ALLY_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
+      if (!allyHitCooldown.current) {
+        allyHitCooldown.current = true;
+        setAlly(a => a ? ({ ...a, health: a.health - 1 }) : null);
+        setEnemy(e => e ? ({ ...e, health: e.health - 1 }) : null);
+        setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
+      }
+    }
+
+    // Check for deaths from combat
+    if (player.health <= 0) {
       resetGame();
       return;
     }
-    if (checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
+    if (ally && ally.health <= 0) {
+      setAlly(null);
+    }
+    if (enemy.health <= 0) {
+      setAllyScore(s => s + 1);
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      return;
+    }
+
+    // Item pickups
+    if (checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
       setTrapCount(s => s + 1);
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-    if (trap) {
-      if (checkCollision({ ...enemyPos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
-        setTrapScore(s => s + 1);
-        if (!allyAwarded) {
-          setAllyAwarded(true);
-          setAllyAvailable(true);
-        }
-        setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-        setTrap(null);
-      } else if (
-        checkCollision({ ...playerPos, size: PLAYER_SIZE }, { ...trap.pos, size: TRAP_SIZE }) &&
-        Date.now() - trap.placedAt > TRAP_PICKUP_COOLDOWN
-      ) {
-        setTrapCount(c => c + 1);
-        setTrap(null);
-      }
+    if (trap && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...trap.pos, size: TRAP_SIZE }) && Date.now() - trap.placedAt > TRAP_PICKUP_COOLDOWN) {
+      setTrapCount(c => c + 1);
+      setTrap(null);
     }
-    if (allyPos && checkCollision({ ...allyPos, size: ALLY_SIZE }, { ...enemyPos, size: ENEMY_SIZE })) {
-        setAllyScore(s => s + 1);
-        setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
-        setAllyPos(null);
-        return;
-    }
-  }, [playerPos, enemyPos, collectiblePos, trap, resetGame, GAME_WIDTH, GAME_HEIGHT, allyPos, allyAwarded]);
+  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded]);
 
   useEffect(() => {
     if (isMobile === undefined) return;
-    if (enemyPos === null) {
-      setEnemyPos(getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT));
+    if (enemy === null) {
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [GAME_WIDTH, GAME_HEIGHT, enemyPos, collectiblePos, isMobile]);
+  }, [GAME_WIDTH, GAME_HEIGHT, enemy, collectiblePos, isMobile]);
 
   if (isMobile === undefined) {
     return null;
@@ -352,28 +391,24 @@ export function GameBoard() {
           className="relative overflow-hidden"
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT, background: 'hsl(var(--background))' }}
         >
-          <div
-            aria-label="Player"
-            className="absolute bg-primary rounded-full"
-            style={{
-              width: PLAYER_SIZE,
-              height: PLAYER_SIZE,
-              left: playerPos.x,
-              top: playerPos.y,
-            }}
-          />
-          {enemyPos && (
-            <div
-              aria-label="Enemy"
-              className="absolute bg-destructive rounded-full"
-              style={{
-                width: ENEMY_SIZE,
-                height: ENEMY_SIZE,
-                left: enemyPos.x,
-                top: enemyPos.y,
-              }}
-            />
+          <div className="absolute" style={{ width: PLAYER_SIZE, height: PLAYER_SIZE, left: player.pos.x, top: player.pos.y }}>
+            <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
+                <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                <span className="text-xs font-bold text-foreground">{player.health}</span>
+            </div>
+            <div aria-label="Player" className="w-full h-full bg-primary rounded-full" />
+          </div>
+
+          {enemy && (
+            <div className="absolute" style={{ width: ENEMY_SIZE, height: ENEMY_SIZE, left: enemy.pos.x, top: enemy.pos.y }}>
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
+                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                    <span className="text-xs font-bold text-foreground">{enemy.health}</span>
+                </div>
+                <div aria-label="Enemy" className="w-full h-full bg-destructive rounded-full" />
+            </div>
           )}
+
           {collectiblePos && (
             <div
               aria-label="Collectible"
@@ -386,6 +421,7 @@ export function GameBoard() {
               }}
             />
           )}
+
           {trap && (
             <div
                 aria-label="Trap"
@@ -398,17 +434,15 @@ export function GameBoard() {
                 }}
             />
           )}
-          {allyPos && (
-            <div
-                aria-label="Ally"
-                className="absolute bg-[hsl(var(--chart-2))] rounded-full"
-                style={{
-                    width: ALLY_SIZE,
-                    height: ALLY_SIZE,
-                    left: allyPos.x,
-                    top: allyPos.y,
-                }}
-            />
+
+          {ally && (
+             <div className="absolute" style={{ width: ALLY_SIZE, height: ALLY_SIZE, left: ally.pos.x, top: ally.pos.y }}>
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
+                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                    <span className="text-xs font-bold text-foreground">{ally.health}</span>
+                </div>
+                <div aria-label="Ally" className="w-full h-full bg-[hsl(var(--chart-2))] rounded-full" />
+            </div>
           )}
         </div>
         {isMobile && (
@@ -477,7 +511,7 @@ export function GameBoard() {
                       e.preventDefault();
                       handleSpawnAlly();
                     }}
-                    disabled={!allyAvailable || !!allyPos}
+                    disabled={!allyAvailable || !!ally}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
                     style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
                     aria-label="Spawn Ally"
