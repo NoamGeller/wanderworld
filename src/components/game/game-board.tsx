@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Heart } from 'lucide-react';
+import { Heart, Sword } from 'lucide-react';
 
 // Game Constants
 const DESKTOP_GAME_WIDTH = 500;
@@ -83,8 +83,10 @@ export function GameBoard() {
   const GAME_WIDTH = isMobile ? MOBILE_GAME_WIDTH : DESKTOP_GAME_WIDTH;
   const GAME_HEIGHT = isMobile ? MOBILE_GAME_HEIGHT : DESKTOP_GAME_HEIGHT;
 
-  const [trapScore, setTrapScore] = useState(0);
-  const [allyScore, setAllyScore] = useState(0);
+  const [trapXp, setTrapXp] = useState(0);
+  const [attackXp, setAttackXp] = useState(0);
+  const [attackLevel, setAttackLevel] = useState(1);
+  const [attackXpTarget, setAttackXpTarget] = useState(2);
   const [trapCount, setTrapCount] = useState(0);
   const [player, setPlayer] = useState<Character>({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
   const [enemy, setEnemy] = useState<Character | null>(null);
@@ -109,8 +111,10 @@ export function GameBoard() {
   const lastMoveDirection = useRef<Position>({ x: 0, y: -1 });
 
   const resetGame = useCallback(() => {
-    setTrapScore(0);
-    setAllyScore(0);
+    setTrapXp(0);
+    setAttackXp(0);
+    setAttackLevel(1);
+    setAttackXpTarget(2);
     setTrapCount(0);
     setTrap(null);
     setAlly(null);
@@ -368,7 +372,7 @@ export function GameBoard() {
 
     // Trap collision (instant kill)
     if (trap && checkCollision({ ...enemy.pos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
-      setTrapScore(s => s + 1);
+      setTrapXp(s => s + 1);
       if (!allyAwarded) {
         setAllyAwarded(true);
         setAllyData({ health: HEALTH_START });
@@ -428,7 +432,14 @@ export function GameBoard() {
       setAlly(null);
     }
     if (enemy.health <= 0) {
-      setAllyScore(s => s + 1);
+        const newXp = attackXp + 1;
+        if (newXp >= attackXpTarget) {
+            setAttackLevel(l => l + 1);
+            setAttackXpTarget(t => t + 1);
+            setAttackXp(0);
+        } else {
+            setAttackXp(newXp);
+        }
       setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       return;
     }
@@ -442,7 +453,7 @@ export function GameBoard() {
       setTrapCount(c => c + 1);
       setTrap(null);
     }
-  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, allyData]);
+  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, allyData, attackXp, attackLevel, attackXpTarget]);
 
   // Ally health regeneration
   useEffect(() => {
@@ -485,8 +496,8 @@ export function GameBoard() {
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
       <CardContent className="p-0">
         <div className="grid grid-cols-3 gap-2 items-center bg-primary/10 p-2 border-b-2 border-primary/20 text-center">
-          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapScore}</h2>
-          <h2 className="text-base font-semibold text-primary font-sans">Ally XP: {allyScore}</h2>
+          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapXp}</h2>
+          <h2 className="text-base font-semibold text-primary font-sans">Attack XP: {attackXp}/{attackXpTarget}</h2>
           <h2 className="text-base font-semibold text-primary font-sans">Traps: {trapCount}</h2>
         </div>
         <div
@@ -494,16 +505,22 @@ export function GameBoard() {
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT, background: 'hsl(var(--background))' }}
         >
           <div className="absolute" style={{ width: PLAYER_SIZE, height: PLAYER_SIZE, left: player.pos.x, top: player.pos.y }}>
-            <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
-                <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                <span className="text-xs font-bold text-foreground">{player.health}</span>
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 select-none whitespace-nowrap">
+                <div className="flex items-center gap-1 bg-card/80 px-1.5 py-0.5 rounded-md">
+                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                    <span className="text-xs font-bold text-foreground">{player.health}</span>
+                </div>
+                <div className="flex items-center gap-1 bg-card/80 px-1.5 py-0.5 rounded-md">
+                    <Sword className="w-3 h-3 text-gray-600 fill-gray-400" />
+                    <span className="text-xs font-bold text-foreground">{attackLevel}</span>
+                </div>
             </div>
             <div aria-label="Player" className="w-full h-full bg-primary rounded-full" />
           </div>
 
           {enemy && (
             <div className="absolute" style={{ width: ENEMY_SIZE, height: ENEMY_SIZE, left: enemy.pos.x, top: enemy.pos.y }}>
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap bg-card/80 px-1.5 py-0.5 rounded-md">
                     <Heart className="w-3 h-3 text-red-500 fill-red-500" />
                     <span className="text-xs font-bold text-foreground">{enemy.health}</span>
                 </div>
@@ -539,7 +556,7 @@ export function GameBoard() {
 
           {ally && (
              <div className="absolute" style={{ width: ALLY_SIZE, height: ALLY_SIZE, left: ally.pos.x, top: ally.pos.y }}>
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap bg-card/80 px-1.5 py-0.5 rounded-md">
                     <Heart className="w-3 h-3 text-red-500 fill-red-500" />
                     <span className="text-xs font-bold text-foreground">{ally.health}</span>
                 </div>
