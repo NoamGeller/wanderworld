@@ -29,6 +29,12 @@ const KNOCKBACK_DECAY = 0.9;
 const ALLY_REGEN_INTERVAL = 2000; // in milliseconds
 const ALLY_RECALL_COOLDOWN = 1000; // in milliseconds
 
+// Mobile Controls Constants
+const JOYSTICK_AREA_HEIGHT = 120;
+const JOYSTICK_BASE_RADIUS = 50;
+const JOYSTICK_HANDLE_RADIUS = 25;
+const ACTION_BUTTON_SIZE = 60;
+
 type Position = {
   x: number;
   y: number;
