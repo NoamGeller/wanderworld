@@ -27,12 +27,7 @@ const HIT_COOLDOWN = 1000; // in milliseconds
 const KNOCKBACK_FORCE = 8;
 const KNOCKBACK_DECAY = 0.9;
 const ALLY_REGEN_INTERVAL = 2000; // in milliseconds
-
-// Joystick Constants
-const JOYSTICK_AREA_HEIGHT = 120;
-const JOYSTICK_BASE_RADIUS = 40;
-const JOYSTICK_HANDLE_RADIUS = 20;
-const ACTION_BUTTON_SIZE = 80;
+const ALLY_RECALL_COOLDOWN = 1000; // in milliseconds
 
 type Position = {
   x: number;
@@ -53,6 +48,10 @@ type Character = {
 type Trap = {
     pos: Position;
     placedAt: number;
+};
+
+type Ally = Character & {
+    spawnedAt: number;
 };
 
 // Helper function for collision detection
@@ -85,7 +84,7 @@ export function GameBoard() {
   const [enemy, setEnemy] = useState<Character | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
-  const [ally, setAlly] = useState<Character | null>(null);
+  const [ally, setAlly] = useState<Ally | null>(null);
   const [allyData, setAllyData] = useState<{ health: number } | null>(null);
   const [allyAwarded, setAllyAwarded] = useState(false);
 
@@ -133,7 +132,7 @@ export function GameBoard() {
       const allyDistance = PLAYER_SIZE / 2 + ALLY_SIZE / 2 + 5;
       const allyX = (player.pos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
       const allyY = (player.pos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
-      setAlly({ pos: { x: allyX, y: allyY }, health: allyData.health, knockback: { vx: 0, vy: 0 } });
+      setAlly({ pos: { x: allyX, y: allyY }, health: allyData.health, knockback: { vx: 0, vy: 0 }, spawnedAt: Date.now() });
     }
   }, [allyData, ally, player.pos]);
 
@@ -308,7 +307,7 @@ export function GameBoard() {
       setAlly(prevAlly => {
         if (!prevAlly || !enemy) return prevAlly;
         
-        let { pos, health, knockback } = prevAlly;
+        let { pos, health, knockback, spawnedAt } = prevAlly;
         let x = pos.x;
         let y = pos.y;
 
@@ -333,7 +332,7 @@ export function GameBoard() {
         
         x = Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, y));
-        return { pos: {x, y}, health, knockback: newKnockback };
+        return { pos: {x, y}, health, knockback: newKnockback, spawnedAt };
       });
 
       animationFrameId.current = requestAnimationFrame(loop);
@@ -355,7 +354,7 @@ export function GameBoard() {
     if (!enemy || !collectiblePos) return;
 
     // Player recalls ally by touch
-    if (ally && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...ally.pos, size: ALLY_SIZE })) {
+    if (ally && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...ally.pos, size: ALLY_SIZE }) && Date.now() - ally.spawnedAt > ALLY_RECALL_COOLDOWN) {
         setAllyData({ health: ally.health });
         setAlly(null);
         return; // Exit to avoid other ally logic this frame
@@ -406,7 +405,8 @@ export function GameBoard() {
 
         setAlly(a => {
             if (!a) return null;
-            return { ...a, health: a.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } };
+            const newHealth = a.health - 1;
+            return { ...a, health: newHealth, knockback: { vx: -knockbackVX, vy: -knockbackVY } };
         });
         setEnemy(e => {
             if (!e) return null;
@@ -447,9 +447,14 @@ export function GameBoard() {
     const intervalId = setInterval(() => {
       setAllyData(d => {
         if (!d || d.health >= HEALTH_START) {
+          if (intervalId) clearInterval(intervalId);
           return d;
         }
-        return { health: d.health + 1 };
+        const newHealth = d.health + 1;
+        if(newHealth >= HEALTH_START) {
+            clearInterval(intervalId);
+        }
+        return { health: newHealth };
       });
     }, ALLY_REGEN_INTERVAL);
 
