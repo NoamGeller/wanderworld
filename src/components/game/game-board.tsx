@@ -4,79 +4,37 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Heart, Sword } from 'lucide-react';
+import {
+    DESKTOP_GAME_WIDTH,
+    DESKTOP_GAME_HEIGHT,
+    MOBILE_GAME_WIDTH,
+    MOBILE_GAME_HEIGHT,
+    PLAYER_SIZE,
+    ENEMY_SIZE,
+    COLLECTIBLE_SIZE,
+    TRAP_SIZE,
+    ALLY_SIZE,
+    PLAYER_SPEED,
+    ENEMY_SPEED,
+    ALLY_SPEED,
+    ENEMY_DIRECTION_CHANGE_INTERVAL,
+    TRAP_PICKUP_COOLDOWN,
+    HEALTH_START,
+    HIT_COOLDOWN,
+    KNOCKBACK_FORCE,
+    KNOCKBACK_DECAY,
+    ALLY_REGEN_INTERVAL,
+    ALLY_RECALL_COOLDOWN,
+} from './constants';
+import type { Position, Character, Trap, Ally } from './types';
+import { checkCollision, getRandomPosition } from './utils';
 
-// Game Constants
-const DESKTOP_GAME_WIDTH = 500;
-const DESKTOP_GAME_HEIGHT = 400;
-const MOBILE_GAME_WIDTH = 340;
-const MOBILE_GAME_HEIGHT = 420;
-
-const PLAYER_SIZE = 20;
-const ENEMY_SIZE = 20;
-const COLLECTIBLE_SIZE = 15;
-const TRAP_SIZE = 22;
-const ALLY_SIZE = 20;
-const PLAYER_SPEED = 3;
-const ENEMY_SPEED = 1.5;
-const ALLY_SPEED = 2.5;
-const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
-const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
-const HEALTH_START = 3;
-const HIT_COOLDOWN = 1000; // in milliseconds
-const KNOCKBACK_FORCE = 8;
-const KNOCKBACK_DECAY = 0.9;
-const ALLY_REGEN_INTERVAL = 2000; // in milliseconds
-const ALLY_RECALL_COOLDOWN = 1000; // in milliseconds
-
-// Mobile Controls Constants
-const JOYSTICK_AREA_HEIGHT = 120;
-const JOYSTICK_BASE_RADIUS = 50;
-const JOYSTICK_HANDLE_RADIUS = 25;
-const ACTION_BUTTON_SIZE = 60;
-
-type Position = {
-  x: number;
-  y: number;
-};
-
-type Knockback = {
-  vx: number;
-  vy: number;
-};
-
-type Character = {
-  pos: Position;
-  health: number;
-  knockback: Knockback;
-};
-
-type Trap = {
-    pos: Position;
-    placedAt: number;
-};
-
-type Ally = Character & {
-    spawnedAt: number;
-};
-
-// Helper function for collision detection
-const checkCollision = (rect1: Position & { size: number }, rect2: Position & { size: number }) => {
-  return (
-    rect1.x < rect2.x + rect2.size &&
-    rect1.x + rect1.size > rect2.x &&
-    rect1.y < rect2.y + rect2.size &&
-    rect1.y + rect1.size > rect2.y
-  );
-};
-
-// Helper function to get a random position
-const getRandomPosition = (size: number, width: number, height: number): Position => {
-  return {
-    x: Math.random() * (width - size),
-    y: Math.random() * (height - size),
-  };
-};
+import { PlayerComponent } from './player-component';
+import { EnemyComponent } from './enemy-component';
+import { AllyComponent } from './ally-component';
+import { CollectibleComponent } from './collectible-component';
+import { TrapComponent } from './trap-component';
+import { MobileControls } from './mobile-controls';
 
 export function GameBoard() {
   const isMobile = useIsMobile();
@@ -194,7 +152,7 @@ export function GameBoard() {
     const dx = touchX - joystickCenter.x;
     const dy = touchY - joystickCenter.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    const maxDistance = JOYSTICK_BASE_RADIUS;
+    const maxDistance = 50; // JOYSTICK_BASE_RADIUS
 
     if (distance > maxDistance) {
       const x = (dx / distance) * maxDistance;
@@ -505,158 +463,27 @@ export function GameBoard() {
           className="relative overflow-hidden"
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT, background: 'hsl(var(--background))' }}
         >
-          <div className="absolute" style={{ width: PLAYER_SIZE, height: PLAYER_SIZE, left: player.pos.x, top: player.pos.y }}>
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
-                <div className="flex items-center gap-1 bg-card/80 px-1.5 py-0.5 rounded-md">
-                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                    <span className="text-xs font-bold text-foreground">{player.health}</span>
-                </div>
-            </div>
-            <div aria-label="Player" className="w-full h-full bg-primary rounded-full" />
-          </div>
-
-          {enemy && (
-            <div className="absolute" style={{ width: ENEMY_SIZE, height: ENEMY_SIZE, left: enemy.pos.x, top: enemy.pos.y }}>
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap bg-card/80 px-1.5 py-0.5 rounded-md">
-                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                    <span className="text-xs font-bold text-foreground">{enemy.health}</span>
-                </div>
-                <div aria-label="Enemy" className="w-full h-full bg-destructive rounded-full" />
-            </div>
-          )}
-
-          {collectiblePos && (
-            <div
-              aria-label="Collectible"
-              className="absolute bg-accent rounded-full"
-              style={{
-                width: COLLECTIBLE_SIZE,
-                height: COLLECTIBLE_SIZE,
-                left: collectiblePos.x,
-                top: collectiblePos.y,
-              }}
-            />
-          )}
-
-          {trap && (
-            <div
-                aria-label="Trap"
-                className="absolute bg-transparent border-2 border-dashed border-destructive/80 rounded-full"
-                style={{
-                    width: TRAP_SIZE,
-                    height: TRAP_SIZE,
-                    left: trap.pos.x,
-                    top: trap.pos.y,
-                }}
-            />
-          )}
-
-          {ally && (
-             <div className="absolute" style={{ width: ALLY_SIZE, height: ALLY_SIZE, left: ally.pos.x, top: ally.pos.y }}>
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 select-none whitespace-nowrap">
-                    <div className="flex items-center gap-1 bg-card/80 px-1.5 py-0.5 rounded-md">
-                        <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                        <span className="text-xs font-bold text-foreground">{ally.health}</span>
-                    </div>
-                    <div className="flex items-center gap-1 bg-card/80 px-1.5 py-0.5 rounded-md">
-                        <Sword className="w-3 h-3 text-gray-600 fill-gray-400" />
-                        <span className="text-xs font-bold text-foreground">{attackLevel}</span>
-                    </div>
-                </div>
-                <div aria-label="Ally" className="w-full h-full bg-[hsl(var(--chart-2))] rounded-full" />
-            </div>
-          )}
+          <PlayerComponent player={player} />
+          {enemy && <EnemyComponent enemy={enemy} />}
+          {collectiblePos && <CollectibleComponent position={collectiblePos} />}
+          {trap && <TrapComponent position={trap.pos} />}
+          {ally && <AllyComponent ally={ally} attackLevel={attackLevel} />}
         </div>
         {isMobile && (
-            <div
-                className="flex items-center justify-around w-full select-none p-2"
-                style={{ height: JOYSTICK_AREA_HEIGHT, background: 'hsl(var(--card))' }}
-            >
-                <div
-                    ref={joystickAreaRef}
-                    className="relative flex items-center justify-center w-28 h-28"
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchCancel={handleTouchEnd}
-                >
-                    <div
-                        className="rounded-full bg-primary/20 touch-none"
-                        style={{
-                            width: JOYSTICK_BASE_RADIUS * 2,
-                            height: JOYSTICK_BASE_RADIUS * 2,
-                        }}
-                    />
-                    <div
-                        className="absolute rounded-full bg-primary/50 cursor-pointer touch-none"
-                        style={{
-                            width: JOYSTICK_HANDLE_RADIUS * 2,
-                            height: JOYSTICK_HANDLE_RADIUS * 2,
-                            transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
-                            transition: isDragging ? 'none' : 'transform 100ms linear',
-                        }}
-                    />
-                </div>
-                <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      handlePlaceTrap();
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handlePlaceTrap();
-                    }}
-                    disabled={trapCount === 0 || !!trap}
-                    className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
-                    style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
-                    aria-label="Place Trap"
-                >
-                    <div
-                        className="bg-accent rounded-full"
-                        style={{
-                            width: COLLECTIBLE_SIZE * 1.5,
-                            height: COLLECTIBLE_SIZE * 1.5,
-                        }}
-                    />
-                    {trapCount > 0 && (
-                        <span className="absolute -top-1 -left-1 flex items-center justify-center w-7 h-7 text-sm font-bold text-primary-foreground bg-primary rounded-full border-2 border-card">
-                            {trapCount}
-                        </span>
-                    )}
-                </button>
-                <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      handleSpawnAlly();
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleSpawnAlly();
-                    }}
-                    disabled={!allyData || !!ally || allyData.health <= 0}
-                    className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
-                    style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
-                    aria-label="Spawn Ally"
-                >
-                    {allyData && !ally && (
-                        <>
-                            <div
-                                className="bg-[hsl(var(--chart-2))] rounded-full"
-                                style={{
-                                    width: ALLY_SIZE * 1.5,
-                                    height: ALLY_SIZE * 1.5,
-                                }}
-                            />
-                            {allyData.health > 0 && (
-                                <div className="absolute -top-1 -left-1 flex items-center gap-1 select-none whitespace-nowrap bg-card px-1 rounded-full border-2 border-border text-xs">
-                                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
-                                    <span className="font-bold text-foreground">{allyData.health}</span>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </button>
-            </div>
+            <MobileControls
+                joystickAreaRef={joystickAreaRef}
+                handleTouchStart={handleTouchStart}
+                handleTouchMove={handleTouchMove}
+                handleTouchEnd={handleTouchEnd}
+                handlePos={handlePos}
+                isDragging={isDragging}
+                handlePlaceTrap={handlePlaceTrap}
+                trapCount={trapCount}
+                trap={trap}
+                handleSpawnAlly={handleSpawnAlly}
+                allyData={allyData}
+                ally={ally}
+            />
         )}
       </CardContent>
     </Card>
