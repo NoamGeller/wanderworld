@@ -41,18 +41,26 @@ export function GameBoard() {
   const GAME_WIDTH = isMobile ? MOBILE_GAME_WIDTH : DESKTOP_GAME_WIDTH;
   const GAME_HEIGHT = isMobile ? MOBILE_GAME_HEIGHT : DESKTOP_GAME_HEIGHT;
 
+  // XP & Levels
   const [trapXp, setTrapXp] = useState(0);
+  const [trapXpTarget, setTrapXpTarget] = useState(2);
   const [attackXp, setAttackXp] = useState(0);
-  const [attackLevel, setAttackLevel] = useState(1);
   const [attackXpTarget, setAttackXpTarget] = useState(2);
+  const [attackLevel, setAttackLevel] = useState(1);
+  
+  // Game State
   const [trapCount, setTrapCount] = useState(0);
   const [player, setPlayer] = useState<Character>({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
   const [enemy, setEnemy] = useState<Character | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
+
+  // Ally State
   const [ally, setAlly] = useState<Ally | null>(null);
   const [allyData, setAllyData] = useState<{ health: number } | null>(null);
   const [allyAwarded, setAllyAwarded] = useState(false);
+  const [allyMaxHealth, setAllyMaxHealth] = useState(HEALTH_START);
+
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const enemyDirection = useRef<Position>({ x: 0, y: 0 });
@@ -69,16 +77,25 @@ export function GameBoard() {
   const lastMoveDirection = useRef<Position>({ x: 0, y: -1 });
 
   const resetGame = useCallback(() => {
+    // Reset XP and Levels
     setTrapXp(0);
+    setTrapXpTarget(2);
     setAttackXp(0);
-    setAttackLevel(1);
     setAttackXpTarget(2);
+    setAttackLevel(1);
+    
+    // Reset Game State
     setTrapCount(0);
     setTrap(null);
+    setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+
+    // Reset Ally State
     setAlly(null);
     setAllyData(null);
     setAllyAwarded(false);
-    setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+    setAllyMaxHealth(HEALTH_START);
+
+    // Initial Spawn
     if (isMobile !== undefined) {
       setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -107,6 +124,34 @@ export function GameBoard() {
   useEffect(() => {
     resetGame();
   }, [GAME_WIDTH, GAME_HEIGHT, resetGame]);
+
+  // Trap XP Level Up
+  useEffect(() => {
+    if (allyAwarded && trapXp >= trapXpTarget) {
+      setTrapXp(xp => xp - trapXpTarget);
+      setTrapXpTarget(t => t + 1);
+      
+      const newMaxHealth = allyMaxHealth + 1;
+      setAllyMaxHealth(newMaxHealth);
+      
+      if (ally) {
+          setAlly(a => a ? { ...a, health: Math.min(a.health + 1, newMaxHealth) } : null);
+      }
+      if (allyData) {
+          setAllyData(d => d ? { ...d, health: Math.min(d.health + 1, newMaxHealth) } : null);
+      }
+    }
+  }, [trapXp, trapXpTarget, allyAwarded, ally, allyData, allyMaxHealth]);
+
+  // Attack XP Level Up
+  useEffect(() => {
+    if (attackXp >= attackXpTarget) {
+        setAttackXp(xp => xp - attackXpTarget);
+        setAttackXpTarget(t => t + 1);
+        setAttackLevel(l => l + 1);
+    }
+  }, [attackXp, attackXpTarget]);
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -333,7 +378,7 @@ export function GameBoard() {
       setTrapXp(s => s + 1);
       if (!allyAwarded) {
         setAllyAwarded(true);
-        setAllyData({ health: HEALTH_START });
+        setAllyData({ health: allyMaxHealth });
       }
       setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       setTrap(null);
@@ -391,14 +436,7 @@ export function GameBoard() {
       setAlly(null);
     }
     if (enemy.health <= 0) {
-        const newXp = attackXp + 1;
-        if (newXp >= attackXpTarget) {
-            setAttackLevel(l => l + 1);
-            setAttackXpTarget(t => t + 1);
-            setAttackXp(0);
-        } else {
-            setAttackXp(newXp);
-        }
+      setAttackXp(xp => xp + 1);
       setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       return;
     }
@@ -412,22 +450,22 @@ export function GameBoard() {
       setTrapCount(c => c + 1);
       setTrap(null);
     }
-  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, allyData, attackXp, attackLevel, attackXpTarget]);
+  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth]);
 
   // Ally health regeneration
   useEffect(() => {
-    if (ally || !allyData || allyData.health >= HEALTH_START) {
+    if (ally || !allyData || allyData.health >= allyMaxHealth) {
       return;
     }
 
     const intervalId = setInterval(() => {
       setAllyData(d => {
-        if (!d || d.health >= HEALTH_START) {
+        if (!d || d.health >= allyMaxHealth) {
           if (intervalId) clearInterval(intervalId);
           return d;
         }
         const newHealth = d.health + 1;
-        if(newHealth >= HEALTH_START) {
+        if(newHealth >= allyMaxHealth) {
             clearInterval(intervalId);
         }
         return { health: newHealth };
@@ -435,7 +473,7 @@ export function GameBoard() {
     }, ALLY_REGEN_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [ally, allyData]);
+  }, [ally, allyData, allyMaxHealth]);
 
   useEffect(() => {
     if (isMobile === undefined) return;
@@ -454,10 +492,9 @@ export function GameBoard() {
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
       <CardContent className="p-0">
-        <div className="grid grid-cols-3 gap-2 items-center bg-primary/10 p-2 border-b-2 border-primary/20 text-center">
-          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapXp}</h2>
+        <div className="grid grid-cols-2 gap-2 items-center bg-primary/10 p-2 border-b-2 border-primary/20 text-center">
+          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapXp}/{trapXpTarget}</h2>
           <h2 className="text-base font-semibold text-primary font-sans">Attack XP: {attackXp}/{attackXpTarget}</h2>
-          <h2 className="text-base font-semibold text-primary font-sans">Traps: {trapCount}</h2>
         </div>
         <div
           className="relative overflow-hidden"
