@@ -24,6 +24,7 @@ const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
 const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
 const HEALTH_START = 3;
 const HIT_COOLDOWN = 1000; // in milliseconds
+const KNOCKBACK_DISTANCE = 15;
 
 // Joystick Constants
 const JOYSTICK_AREA_HEIGHT = 120;
@@ -324,8 +325,28 @@ export function GameBoard() {
     if (checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
       if (!playerHitCooldown.current) {
         playerHitCooldown.current = true;
-        setPlayer(p => ({ ...p, health: p.health - 1 }));
-        setEnemy(e => e ? ({ ...e, health: e.health - 1 }) : null);
+        
+        const dx = enemy.pos.x - player.pos.x;
+        const dy = enemy.pos.y - player.pos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        const knockbackX = (dx / distance) * KNOCKBACK_DISTANCE;
+        const knockbackY = (dy / distance) * KNOCKBACK_DISTANCE;
+
+        setPlayer(p => {
+            const newPos = {
+                x: Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, p.pos.x - knockbackX)),
+                y: Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, p.pos.y - knockbackY)),
+            };
+            return { ...p, health: p.health - 1, pos: newPos };
+        });
+        setEnemy(e => {
+            if (!e) return null;
+            const newPos = {
+                x: Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, e.pos.x + knockbackX)),
+                y: Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, e.pos.y + knockbackY)),
+            };
+            return { ...e, health: e.health - 1, pos: newPos };
+        });
         setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
       }
     }
@@ -334,8 +355,29 @@ export function GameBoard() {
     if (ally && checkCollision({ ...ally.pos, size: ALLY_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
       if (!allyHitCooldown.current) {
         allyHitCooldown.current = true;
-        setAlly(a => a ? ({ ...a, health: a.health - 1 }) : null);
-        setEnemy(e => e ? ({ ...e, health: e.health - 1 }) : null);
+
+        const dx = enemy.pos.x - ally.pos.x;
+        const dy = enemy.pos.y - ally.pos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        const knockbackX = (dx / distance) * KNOCKBACK_DISTANCE;
+        const knockbackY = (dy / distance) * KNOCKBACK_DISTANCE;
+
+        setAlly(a => {
+            if (!a) return null;
+            const newPos = {
+                x: Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, a.pos.x - knockbackX)),
+                y: Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, a.pos.y - knockbackY)),
+            };
+            return { ...a, health: a.health - 1, pos: newPos };
+        });
+        setEnemy(e => {
+            if (!e) return null;
+            const newPos = {
+                x: Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, e.pos.x + knockbackX)),
+                y: Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, e.pos.y + knockbackY)),
+            };
+            return { ...e, health: e.health - 1, pos: newPos };
+        });
         setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
       }
     }
