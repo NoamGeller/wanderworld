@@ -26,6 +26,7 @@ const HEALTH_START = 3;
 const HIT_COOLDOWN = 1000; // in milliseconds
 const KNOCKBACK_FORCE = 8;
 const KNOCKBACK_DECAY = 0.9;
+const ALLY_REGEN_INTERVAL = 2000; // in milliseconds
 
 // Joystick Constants
 const JOYSTICK_AREA_HEIGHT = 120;
@@ -85,7 +86,7 @@ export function GameBoard() {
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
   const [ally, setAlly] = useState<Character | null>(null);
-  const [allyAvailable, setAllyAvailable] = useState(false);
+  const [allyData, setAllyData] = useState<{ health: number } | null>(null);
   const [allyAwarded, setAllyAwarded] = useState(false);
 
   const keysPressed = useRef<{ [key: string]: boolean }>({});
@@ -108,7 +109,7 @@ export function GameBoard() {
     setTrapCount(0);
     setTrap(null);
     setAlly(null);
-    setAllyAvailable(false);
+    setAllyData(null);
     setAllyAwarded(false);
     setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
     if (isMobile !== undefined) {
@@ -121,21 +122,20 @@ export function GameBoard() {
     if (trapCount > 0 && !trap) {
         setTrapCount(c => c - 1);
         const trapDistance = PLAYER_SIZE / 2 + TRAP_SIZE / 2 + 10;
-        const trapX = (player.pos.x + PLAYER_SIZE / 2) - (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
-        const trapY = (player.pos.y + PLAYER_SIZE / 2) - (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
+        const trapX = (player.pos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * trapDistance) - (TRAP_SIZE / 2);
+        const trapY = (player.pos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * trapDistance) - (TRAP_SIZE / 2);
         setTrap({ pos: { x: trapX, y: trapY }, placedAt: Date.now() });
     }
   }, [trapCount, trap, player.pos]);
 
   const handleSpawnAlly = useCallback(() => {
-    if (allyAvailable && !ally) {
-      setAllyAvailable(false);
+    if (allyData && !ally && allyData.health > 0) {
       const allyDistance = PLAYER_SIZE / 2 + ALLY_SIZE / 2 + 5;
       const allyX = (player.pos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
       const allyY = (player.pos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
-      setAlly({ pos: { x: allyX, y: allyY }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+      setAlly({ pos: { x: allyX, y: allyY }, health: allyData.health, knockback: { vx: 0, vy: 0 } });
     }
-  }, [allyAvailable, ally, player.pos]);
+  }, [allyData, ally, player.pos]);
 
   useEffect(() => {
     resetGame();
@@ -347,14 +347,26 @@ export function GameBoard() {
   }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy]);
 
   useEffect(() => {
+    if (player.health <= 0) {
+      resetGame();
+      return;
+    }
+    
     if (!enemy || !collectiblePos) return;
+
+    // Player recalls ally by touch
+    if (ally && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...ally.pos, size: ALLY_SIZE })) {
+        setAllyData({ health: ally.health });
+        setAlly(null);
+        return; // Exit to avoid other ally logic this frame
+    }
 
     // Trap collision (instant kill)
     if (trap && checkCollision({ ...enemy.pos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
       setTrapScore(s => s + 1);
       if (!allyAwarded) {
         setAllyAwarded(true);
-        setAllyAvailable(true);
+        setAllyData({ health: HEALTH_START });
       }
       setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       setTrap(null);
@@ -405,11 +417,8 @@ export function GameBoard() {
     }
 
     // Check for deaths from combat
-    if (player.health <= 0) {
-      resetGame();
-      return;
-    }
     if (ally && ally.health <= 0) {
+      setAllyData({ health: 0 });
       setAlly(null);
     }
     if (enemy.health <= 0) {
@@ -427,7 +436,25 @@ export function GameBoard() {
       setTrapCount(c => c + 1);
       setTrap(null);
     }
-  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded]);
+  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, allyData]);
+
+  // Ally health regeneration
+  useEffect(() => {
+    if (ally || !allyData || allyData.health >= HEALTH_START) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setAllyData(d => {
+        if (!d || d.health >= HEALTH_START) {
+          return d;
+        }
+        return { health: d.health + 1 };
+      });
+    }, ALLY_REGEN_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [ally, allyData]);
 
   useEffect(() => {
     if (isMobile === undefined) return;
@@ -575,19 +602,27 @@ export function GameBoard() {
                       e.preventDefault();
                       handleSpawnAlly();
                     }}
-                    disabled={!allyAvailable || !!ally}
+                    disabled={!allyData || !!ally || allyData.health <= 0}
                     className="relative flex items-center justify-center rounded-full bg-secondary disabled:bg-muted disabled:opacity-50 transition-colors"
                     style={{ width: ACTION_BUTTON_SIZE, height: ACTION_BUTTON_SIZE }}
                     aria-label="Spawn Ally"
                 >
-                    {allyAvailable && (
-                        <div
-                            className="bg-[hsl(var(--chart-2))] rounded-full"
-                            style={{
-                                width: ALLY_SIZE * 1.5,
-                                height: ALLY_SIZE * 1.5,
-                            }}
-                        />
+                    {allyData && !ally && (
+                        <>
+                            <div
+                                className="bg-[hsl(var(--chart-2))] rounded-full"
+                                style={{
+                                    width: ALLY_SIZE * 1.5,
+                                    height: ALLY_SIZE * 1.5,
+                                }}
+                            />
+                            {allyData.health > 0 && (
+                                <div className="absolute -top-1 -left-1 flex items-center gap-1 select-none whitespace-nowrap bg-card px-1 rounded-full border-2 border-border text-xs">
+                                    <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                                    <span className="font-bold text-foreground">{allyData.health}</span>
+                                </div>
+                            )}
+                        </>
                     )}
                 </button>
             </div>
