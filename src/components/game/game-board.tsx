@@ -24,7 +24,8 @@ const ENEMY_DIRECTION_CHANGE_INTERVAL = 120; // in frames
 const TRAP_PICKUP_COOLDOWN = 1000; // in milliseconds
 const HEALTH_START = 3;
 const HIT_COOLDOWN = 1000; // in milliseconds
-const KNOCKBACK_DISTANCE = 15;
+const KNOCKBACK_FORCE = 8;
+const KNOCKBACK_DECAY = 0.9;
 
 // Joystick Constants
 const JOYSTICK_AREA_HEIGHT = 120;
@@ -37,9 +38,15 @@ type Position = {
   y: number;
 };
 
+type Knockback = {
+  vx: number;
+  vy: number;
+};
+
 type Character = {
   pos: Position;
   health: number;
+  knockback: Knockback;
 };
 
 type Trap = {
@@ -73,7 +80,7 @@ export function GameBoard() {
   const [trapScore, setTrapScore] = useState(0);
   const [allyScore, setAllyScore] = useState(0);
   const [trapCount, setTrapCount] = useState(0);
-  const [player, setPlayer] = useState<Character>({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START });
+  const [player, setPlayer] = useState<Character>({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
   const [enemy, setEnemy] = useState<Character | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
@@ -103,9 +110,9 @@ export function GameBoard() {
     setAlly(null);
     setAllyAvailable(false);
     setAllyAwarded(false);
-    setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START });
+    setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
     if (isMobile !== undefined) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
@@ -126,7 +133,7 @@ export function GameBoard() {
       const allyDistance = PLAYER_SIZE / 2 + ALLY_SIZE / 2 + 5;
       const allyX = (player.pos.x + PLAYER_SIZE / 2) + (lastMoveDirection.current.x * allyDistance) - (ALLY_SIZE / 2);
       const allyY = (player.pos.y + PLAYER_SIZE / 2) + (lastMoveDirection.current.y * allyDistance) - (ALLY_SIZE / 2);
-      setAlly({ pos: { x: allyX, y: allyY }, health: HEALTH_START });
+      setAlly({ pos: { x: allyX, y: allyY }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
     }
   }, [allyAvailable, ally, player.pos]);
 
@@ -225,75 +232,108 @@ export function GameBoard() {
   useEffect(() => {
     const loop = () => {
       setPlayer(prev => {
-        let { pos, health } = prev;
+        let { pos, health, knockback } = prev;
         let x = pos.x;
         let y = pos.y;
-        let moveX = 0;
-        let moveY = 0;
-        if (isMobile) {
-            moveX = playerDirection.current.x;
-            moveY = playerDirection.current.y;
-        } else {
-            if (keysPressed.current['arrowup'] || keysPressed.current['w']) moveY -= 1;
-            if (keysPressed.current['arrowdown'] || keysPressed.current['s']) moveY += 1;
-            if (keysPressed.current['arrowleft'] || keysPressed.current['a']) moveX -= 1;
-            if (keysPressed.current['arrowright'] || keysPressed.current['d']) moveX += 1;
+        
+        x += knockback.vx;
+        y += knockback.vy;
 
-            const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
-            if (magnitude > 1) {
-                moveX /= magnitude;
-                moveY /= magnitude;
-            }
+        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
+        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
+        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
+        
+        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
+          let moveX = 0;
+          let moveY = 0;
+          if (isMobile) {
+              moveX = playerDirection.current.x;
+              moveY = playerDirection.current.y;
+          } else {
+              if (keysPressed.current['arrowup'] || keysPressed.current['w']) moveY -= 1;
+              if (keysPressed.current['arrowdown'] || keysPressed.current['s']) moveY += 1;
+              if (keysPressed.current['arrowleft'] || keysPressed.current['a']) moveX -= 1;
+              if (keysPressed.current['arrowright'] || keysPressed.current['d']) moveX += 1;
+
+              const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+              if (magnitude > 1) {
+                  moveX /= magnitude;
+                  moveY /= magnitude;
+              }
+          }
+          if (moveX !== 0 || moveY !== 0) {
+              lastMoveDirection.current = { x: moveX, y: moveY };
+          }
+          x += moveX * PLAYER_SPEED;
+          y += moveY * PLAYER_SPEED;
         }
-        if (moveX !== 0 || moveY !== 0) {
-            lastMoveDirection.current = { x: moveX, y: moveY };
-        }
-        x += moveX * PLAYER_SPEED;
-        y += moveY * PLAYER_SPEED;
+
         x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, y));
-        return { pos: { x, y }, health };
+        return { pos: { x, y }, health, knockback: newKnockback };
       });
 
       setEnemy(prev => {
         if (!prev) return null;
-        if (enemyDirectionChangeCounter.current <= 0) {
-          const angle = Math.random() * 2 * Math.PI;
-          enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
-          enemyDirectionChangeCounter.current = ENEMY_DIRECTION_CHANGE_INTERVAL;
-        } else {
-          enemyDirectionChangeCounter.current--;
-        }
-        let { pos, health } = prev;
+        let { pos, health, knockback } = prev;
         let x = pos.x;
         let y = pos.y;
-        x += enemyDirection.current.x * ENEMY_SPEED;
-        y += enemyDirection.current.y * ENEMY_SPEED;
-        if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
-        if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
+
+        x += knockback.vx;
+        y += knockback.vy;
+
+        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
+        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
+        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
+
+        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
+          if (enemyDirectionChangeCounter.current <= 0) {
+            const angle = Math.random() * 2 * Math.PI;
+            enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
+            enemyDirectionChangeCounter.current = ENEMY_DIRECTION_CHANGE_INTERVAL;
+          } else {
+            enemyDirectionChangeCounter.current--;
+          }
+          x += enemyDirection.current.x * ENEMY_SPEED;
+          y += enemyDirection.current.y * ENEMY_SPEED;
+          if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
+          if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
+        }
+
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-        return { pos: {x, y}, health };
+        return { pos: {x, y}, health, knockback: newKnockback };
       });
 
       setAlly(prevAlly => {
         if (!prevAlly || !enemy) return prevAlly;
-        const dx = enemy.pos.x - prevAlly.pos.x;
-        const dy = enemy.pos.y - prevAlly.pos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < 1) {
-            return prevAlly;
-        }
-        const moveX = (dx / distance) * ALLY_SPEED;
-        const moveY = (dy / distance) * ALLY_SPEED;
-        let { pos, health } = prevAlly;
+        
+        let { pos, health, knockback } = prevAlly;
         let x = pos.x;
         let y = pos.y;
-        x += moveX;
-        y += moveY;
+
+        x += knockback.vx;
+        y += knockback.vy;
+
+        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
+        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
+        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
+
+        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
+          const dx = enemy.pos.x - x;
+          const dy = enemy.pos.y - y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance > 1) {
+              const moveX = (dx / distance) * ALLY_SPEED;
+              const moveY = (dy / distance) * ALLY_SPEED;
+              x += moveX;
+              y += moveY;
+          }
+        }
+        
         x = Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, y));
-        return { pos: {x, y}, health };
+        return { pos: {x, y}, health, knockback: newKnockback };
       });
 
       animationFrameId.current = requestAnimationFrame(loop);
@@ -316,7 +356,7 @@ export function GameBoard() {
         setAllyAwarded(true);
         setAllyAvailable(true);
       }
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       setTrap(null);
       return;
     }
@@ -329,23 +369,13 @@ export function GameBoard() {
         const dx = enemy.pos.x - player.pos.x;
         const dy = enemy.pos.y - player.pos.y;
         const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        const knockbackX = (dx / distance) * KNOCKBACK_DISTANCE;
-        const knockbackY = (dy / distance) * KNOCKBACK_DISTANCE;
-
-        setPlayer(p => {
-            const newPos = {
-                x: Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, p.pos.x - knockbackX)),
-                y: Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, p.pos.y - knockbackY)),
-            };
-            return { ...p, health: p.health - 1, pos: newPos };
-        });
+        const knockbackVX = (dx / distance) * KNOCKBACK_FORCE;
+        const knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
+        
+        setPlayer(p => ({ ...p, health: p.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } }));
         setEnemy(e => {
             if (!e) return null;
-            const newPos = {
-                x: Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, e.pos.x + knockbackX)),
-                y: Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, e.pos.y + knockbackY)),
-            };
-            return { ...e, health: e.health - 1, pos: newPos };
+            return { ...e, health: e.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } };
         });
         setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
       }
@@ -359,24 +389,16 @@ export function GameBoard() {
         const dx = enemy.pos.x - ally.pos.x;
         const dy = enemy.pos.y - ally.pos.y;
         const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        const knockbackX = (dx / distance) * KNOCKBACK_DISTANCE;
-        const knockbackY = (dy / distance) * KNOCKBACK_DISTANCE;
+        const knockbackVX = (dx / distance) * KNOCKBACK_FORCE;
+        const knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
 
         setAlly(a => {
             if (!a) return null;
-            const newPos = {
-                x: Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, a.pos.x - knockbackX)),
-                y: Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, a.pos.y - knockbackY)),
-            };
-            return { ...a, health: a.health - 1, pos: newPos };
+            return { ...a, health: a.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } };
         });
         setEnemy(e => {
             if (!e) return null;
-            const newPos = {
-                x: Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, e.pos.x + knockbackX)),
-                y: Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, e.pos.y + knockbackY)),
-            };
-            return { ...e, health: e.health - 1, pos: newPos };
+            return { ...e, health: e.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } };
         });
         setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
       }
@@ -392,7 +414,7 @@ export function GameBoard() {
     }
     if (enemy.health <= 0) {
       setAllyScore(s => s + 1);
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
       return;
     }
 
@@ -410,7 +432,7 @@ export function GameBoard() {
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
