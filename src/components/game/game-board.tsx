@@ -420,7 +420,8 @@ export function GameBoard() {
         });
         setEnemy(e => {
             if (!e) return null;
-            return { ...e, health: e.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } };
+            const newHealth = e.health - attackLevel;
+            return { ...e, health: newHealth, knockback: { vx: knockbackVX, vy: knockbackVY } };
         });
         setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
       }
