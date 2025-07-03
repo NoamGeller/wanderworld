@@ -69,12 +69,19 @@ export function GameBoard() {
   const playerHitCooldown = useRef(false);
   const allyHitCooldown = useRef(false);
 
+  // Joystick Controls
   const [isDragging, setIsDragging] = useState(false);
   const [handlePos, setHandlePos] = useState<Position>({ x: 0, y: 0 });
   const playerDirection = useRef<Position>({ x: 0, y: 0 });
   const joystickAreaRef = useRef<HTMLDivElement>(null);
   const joystickTouchId = useRef<number | null>(null);
   const lastMoveDirection = useRef<Position>({ x: 0, y: -1 });
+
+  // Touch-to-move Controls
+  const [touchMoveTarget, setTouchMoveTarget] = useState<Position | null>(null);
+  const gameAreaTouchId = useRef<number | null>(null);
+  const gameAreaRef = useRef<HTMLDivElement>(null);
+
 
   const resetGame = useCallback(() => {
     // Reset XP and Levels
@@ -184,6 +191,7 @@ export function GameBoard() {
     };
   }, [handlePlaceTrap, handleSpawnAlly]);
 
+  // Joystick handlers
   const updateHandle = (touch: { clientX: number, clientY: number }) => {
     if (!joystickAreaRef.current) return;
     const joystickCenter = {
@@ -241,6 +249,42 @@ export function GameBoard() {
     }
   };
 
+  // Touch-to-move handlers
+  const handleGameAreaTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (joystickTouchId.current !== null) return;
+    const touch = e.changedTouches[0];
+    if (gameAreaRef.current && touch) {
+      gameAreaTouchId.current = touch.identifier;
+      const rect = gameAreaRef.current.getBoundingClientRect();
+      const touchX = touch.clientX - rect.left;
+      const touchY = touch.clientY - rect.top;
+      setTouchMoveTarget({ x: touchX, y: touchY });
+    }
+  };
+
+  const handleGameAreaTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (gameAreaTouchId.current === null) return;
+    const touch = Array.from(e.touches).find(
+      (t) => t.identifier === gameAreaTouchId.current
+    );
+    if (gameAreaRef.current && touch) {
+      const rect = gameAreaRef.current.getBoundingClientRect();
+      const touchX = touch.clientX - rect.left;
+      const touchY = touch.clientY - rect.top;
+      setTouchMoveTarget({ x: touchX, y: touchY });
+    }
+  };
+
+  const handleGameAreaTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touchEnded = Array.from(e.changedTouches).some(
+      (t) => t.identifier === gameAreaTouchId.current
+    );
+    if (touchEnded) {
+      gameAreaTouchId.current = null;
+      setTouchMoveTarget(null);
+    }
+  };
+
   useEffect(() => {
     const loop = () => {
       setPlayer(prev => {
@@ -259,8 +303,21 @@ export function GameBoard() {
           let moveX = 0;
           let moveY = 0;
           if (isMobile) {
+            // Joystick has priority
+            if (playerDirection.current.x !== 0 || playerDirection.current.y !== 0) {
               moveX = playerDirection.current.x;
               moveY = playerDirection.current.y;
+            } 
+            // Fallback to touch-to-move
+            else if (touchMoveTarget) {
+              const dx = touchMoveTarget.x - (x + PLAYER_SIZE / 2);
+              const dy = touchMoveTarget.y - (y + PLAYER_SIZE / 2);
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance > PLAYER_SPEED) { // To prevent jittering
+                moveX = dx / distance;
+                moveY = dy / distance;
+              }
+            }
           } else {
               if (keysPressed.current['arrowup'] || keysPressed.current['w']) moveY -= 1;
               if (keysPressed.current['arrowdown'] || keysPressed.current['s']) moveY += 1;
@@ -356,7 +413,7 @@ export function GameBoard() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy, touchMoveTarget]);
 
   useEffect(() => {
     if (player.health <= 0) {
@@ -497,8 +554,13 @@ export function GameBoard() {
           <h2 className="text-base font-semibold text-primary font-sans">Attack XP: {attackXp}/{attackXpTarget}</h2>
         </div>
         <div
-          className="relative overflow-hidden"
+          ref={gameAreaRef}
+          className="relative overflow-hidden touch-none"
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT, background: 'hsl(var(--background))' }}
+          onTouchStart={handleGameAreaTouchStart}
+          onTouchMove={handleGameAreaTouchMove}
+          onTouchEnd={handleGameAreaTouchEnd}
+          onTouchCancel={handleGameAreaTouchEnd}
         >
           <PlayerComponent player={player} />
           {enemy && <EnemyComponent enemy={enemy} />}
