@@ -9,10 +9,13 @@ export type Knockback = {
   vy: number;
 };
 
+export type EnemyType = 'fire' | 'water' | 'earth' | 'air';
+
 export type Character = {
   pos: Position;
   health: number;
   knockback: Knockback;
+  type?: EnemyType;
 };
 
 export type Trap = {

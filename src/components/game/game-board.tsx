@@ -27,7 +27,7 @@ import {
     ALLY_RECALL_COOLDOWN,
 } from './constants';
 import type { Position, Character, Trap, Ally } from './types';
-import { checkCollision, getRandomPosition } from './utils';
+import { checkCollision, getRandomPosition, getRandomEnemyType } from './utils';
 
 import { PlayerComponent } from './player-component';
 import { EnemyComponent } from './enemy-component';
@@ -104,7 +104,7 @@ export function GameBoard() {
 
     // Initial Spawn
     if (isMobile !== undefined) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
@@ -344,7 +344,7 @@ export function GameBoard() {
 
       setEnemy(prev => {
         if (!prev) return null;
-        let { pos, health, knockback } = prev;
+        let { pos, health, knockback, type } = prev;
         let x = pos.x;
         let y = pos.y;
 
@@ -371,7 +371,7 @@ export function GameBoard() {
 
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-        return { pos: {x, y}, health, knockback: newKnockback };
+        return { pos: {x, y}, health, knockback: newKnockback, type };
       });
 
       setAlly(prevAlly => {
@@ -437,7 +437,7 @@ export function GameBoard() {
         setAllyAwarded(true);
         setAllyData({ health: allyMaxHealth });
       }
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
       setTrap(null);
       return;
     }
@@ -494,7 +494,7 @@ export function GameBoard() {
     }
     if (enemy.health <= 0) {
       setAttackXp(xp => xp + 1);
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
       return;
     }
 
@@ -535,7 +535,7 @@ export function GameBoard() {
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));

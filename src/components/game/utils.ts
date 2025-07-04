@@ -1,5 +1,5 @@
 
-import type { Position } from './types';
+import type { Position, EnemyType } from './types';
 
 // Helper function for collision detection
 export const checkCollision = (rect1: Position & { size: number }, rect2: Position & { size: number }) => {
@@ -17,4 +17,9 @@ export const getRandomPosition = (size: number, width: number, height: number): 
     x: Math.random() * (width - size),
     y: Math.random() * (height - size),
   };
+};
+
+const enemyTypes: EnemyType[] = ['fire', 'water', 'earth', 'air'];
+export const getRandomEnemyType = (): EnemyType => {
+  return enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
 };
