@@ -19,7 +19,10 @@ export const getRandomPosition = (size: number, width: number, height: number): 
   };
 };
 
-const enemyTypes: EnemyType[] = ['fire', 'water', 'earth', 'air'];
-export const getRandomEnemyType = (): EnemyType => {
-  return enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+export const getRandomEnemyType = (availableTypes: EnemyType[]): EnemyType => {
+  if (availableTypes.length === 0) {
+    // Fallback to a default type if the array is empty, though UI should prevent this.
+    return 'fire';
+  }
+  return availableTypes[Math.floor(Math.random() * availableTypes.length)];
 };

@@ -26,8 +26,11 @@ import {
     ALLY_REGEN_INTERVAL,
     ALLY_RECALL_COOLDOWN,
 } from './constants';
-import type { Position, Character, Trap, Ally } from './types';
+import type { Position, Character, Trap, Ally, EnemyType } from './types';
 import { checkCollision, getRandomPosition, getRandomEnemyType } from './utils';
+import { Cog } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { SettingsMenu } from './settings-menu';
 
 import { PlayerComponent } from './player-component';
 import { EnemyComponent } from './enemy-component';
@@ -54,6 +57,8 @@ export function GameBoard() {
   const [enemy, setEnemy] = useState<Character | null>(null);
   const [collectiblePos, setCollectiblePos] = useState<Position | null>(null);
   const [trap, setTrap] = useState<Trap | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [enabledEnemyTypes, setEnabledEnemyTypes] = useState<EnemyType[]>(['fire', 'water', 'earth', 'air']);
 
   // Ally State
   const [ally, setAlly] = useState<Ally | null>(null);
@@ -104,10 +109,10 @@ export function GameBoard() {
 
     // Initial Spawn
     if (isMobile !== undefined) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [GAME_WIDTH, GAME_HEIGHT, isMobile]);
+  }, [GAME_WIDTH, GAME_HEIGHT, isMobile, enabledEnemyTypes]);
 
   const handlePlaceTrap = useCallback(() => {
     if (trapCount > 0 && !trap) {
@@ -437,7 +442,7 @@ export function GameBoard() {
         setAllyAwarded(true);
         setAllyData({ health: allyMaxHealth });
       }
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
       setTrap(null);
       return;
     }
@@ -494,7 +499,7 @@ export function GameBoard() {
     }
     if (enemy.health <= 0) {
       setAttackXp(xp => xp + 1);
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
       return;
     }
 
@@ -507,7 +512,7 @@ export function GameBoard() {
       setTrapCount(c => c + 1);
       setTrap(null);
     }
-  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth]);
+  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes]);
 
   // Ally health regeneration
   useEffect(() => {
@@ -535,12 +540,12 @@ export function GameBoard() {
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType() });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
-  }, [GAME_WIDTH, GAME_HEIGHT, enemy, collectiblePos, isMobile]);
+  }, [GAME_WIDTH, GAME_HEIGHT, enemy, collectiblePos, isMobile, enabledEnemyTypes]);
 
   if (isMobile === undefined) {
     return null;
@@ -549,9 +554,20 @@ export function GameBoard() {
   return (
     <Card className="w-auto border-4 border-primary/20 shadow-2xl bg-card">
       <CardContent className="p-0">
-        <div className="grid grid-cols-2 gap-2 items-center bg-primary/10 p-2 border-b-2 border-primary/20 text-center">
-          <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapXp}/{trapXpTarget}</h2>
-          <h2 className="text-base font-semibold text-primary font-sans">Attack XP: {attackXp}/{attackXpTarget}</h2>
+        <div className="flex justify-between items-center bg-primary/10 p-2 border-b-2 border-primary/20">
+            <div className="flex gap-4">
+                <h2 className="text-base font-semibold text-primary font-sans">Trap XP: {trapXp}/{trapXpTarget}</h2>
+                <h2 className="text-base font-semibold text-primary font-sans">Attack XP: {attackXp}/{attackXpTarget}</h2>
+            </div>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsSettingsOpen(true)}
+            >
+                <Cog className="h-5 w-5 text-primary" />
+                <span className="sr-only">Open Settings</span>
+            </Button>
         </div>
         <div
           ref={gameAreaRef}
@@ -568,6 +584,12 @@ export function GameBoard() {
           {trap && <TrapComponent position={trap.pos} />}
           {ally && <AllyComponent ally={ally} attackLevel={attackLevel} />}
         </div>
+         <SettingsMenu
+            open={isSettingsOpen}
+            onOpenChange={setIsSettingsOpen}
+            enabledTypes={enabledEnemyTypes}
+            onEnabledTypesChange={setEnabledEnemyTypes}
+        />
         {isMobile && (
             <MobileControls
                 joystickAreaRef={joystickAreaRef}
