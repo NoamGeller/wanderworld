@@ -86,7 +86,16 @@ export function handleGameInteractions({
             const knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
             
             setPlayer(p => ({ ...p, health: p.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } }));
-            setEnemy(e => e ? { ...e, health: e.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } } : null);
+            
+            setEnemy(e => {
+                if (!e) return null;
+                const newHealth = e.health - 1;
+                if (newHealth <= 0) {
+                    setAttackXp(xp => xp + 1);
+                    return { pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: Date.now() };
+                }
+                return { ...e, health: newHealth, knockback: { vx: knockbackVX, vy: knockbackVY } };
+            });
 
             setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
         }
@@ -121,7 +130,16 @@ export function handleGameInteractions({
             const knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
 
             setAlly(a => a ? { ...a, health: a.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } } : null);
-            setEnemy(e => e ? { ...e, health: e.health - attackLevel, knockback: { vx: knockbackVX, vy: knockbackVY } } : null);
+            
+            setEnemy(e => {
+                if (!e) return null;
+                const newHealth = e.health - attackLevel;
+                if (newHealth <= 0) {
+                    setAttackXp(xp => xp + 1);
+                    return { pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: Date.now() };
+                }
+                return { ...e, health: newHealth, knockback: { vx: knockbackVX, vy: knockbackVY } };
+            });
 
             setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
         }
@@ -131,11 +149,6 @@ export function handleGameInteractions({
     if (ally && ally.health <= 0) {
         setAllyData({ health: 0 });
         setAlly(null);
-    }
-    if (enemy.health <= 0) {
-        setAttackXp(xp => xp + 1);
-        setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: Date.now() });
-        return;
     }
     
     // Player-Collectible collision
