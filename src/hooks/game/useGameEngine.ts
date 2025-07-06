@@ -8,25 +8,17 @@ import {
     COLLECTIBLE_SIZE,
     TRAP_SIZE,
     ALLY_SIZE,
-    PLAYER_SPEED,
-    ENEMY_SPEED,
-    ALLY_SPEED,
-    ENEMY_DIRECTION_CHANGE_INTERVAL,
-    TRAP_PICKUP_COOLDOWN,
     HEALTH_START,
-    HIT_COOLDOWN,
-    KNOCKBACK_FORCE,
-    KNOCKBACK_DECAY,
     ALLY_REGEN_INTERVAL,
-    ALLY_RECALL_COOLDOWN,
-    WATER_ENEMY_ATTACK_INTERVAL,
-    PROJECTILE_SPEED,
-    PROJECTILE_GROWTH_DURATION,
-    PROJECTILE_MAX_LENGTH,
-    PROJECTILE_THICKNESS,
 } from '@/components/game/constants';
 import type { Position, Character, Trap, Ally, EnemyType, WaterProjectile } from '@/components/game/types';
-import { checkCollision, getRandomPosition, getRandomEnemyType, checkCircleCollision } from '@/components/game/utils';
+import { getRandomPosition, getRandomEnemyType } from '@/components/game/utils';
+
+import { updatePlayer } from './player';
+import { updateEnemy, updateProjectiles } from './enemy';
+import { updateAlly } from './ally';
+import { handleGameInteractions } from './interactions';
+
 
 type GameEngineProps = {
   GAME_WIDTH: number;
@@ -247,184 +239,54 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     }
   }, []);
 
+  // Main game loop
   useEffect(() => {
     const loop = () => {
       setPlayer(prev => {
-        let { pos, health, knockback } = prev;
-        let x = pos.x, y = pos.y;
-        x += knockback.vx; y += knockback.vy;
-        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
-        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
-        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
-        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
-          let moveX = 0, moveY = 0;
-          if (isMobile) {
-            if (playerDirection.current.x !== 0 || playerDirection.current.y !== 0) {
-              moveX = playerDirection.current.x; moveY = playerDirection.current.y;
-            } else if (touchMoveTarget) {
-              const dx = touchMoveTarget.x - (x + PLAYER_SIZE / 2);
-              const dy = touchMoveTarget.y - (y + PLAYER_SIZE / 2);
-              const distance = Math.sqrt(dx * dx + dy * dy);
-              if (distance > PLAYER_SPEED) { moveX = dx / distance; moveY = dy / distance; }
-            }
-          } else {
-              if (keysPressed.current['arrowup'] || keysPressed.current['w']) moveY -= 1;
-              if (keysPressed.current['arrowdown'] || keysPressed.current['s']) moveY += 1;
-              if (keysPressed.current['arrowleft'] || keysPressed.current['a']) moveX -= 1;
-              if (keysPressed.current['arrowright'] || keysPressed.current['d']) moveX += 1;
-              const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
-              if (magnitude > 1) { moveX /= magnitude; moveY /= magnitude; }
+          const { newPlayer, lastMoveDirection: newLastMoveDirection } = updatePlayer({
+              player: prev,
+              keysPressed, playerDirection, touchMoveTarget, isMobile, GAME_WIDTH, GAME_HEIGHT
+          });
+          if (newLastMoveDirection) {
+              lastMoveDirection.current = newLastMoveDirection;
           }
-          if (moveX !== 0 || moveY !== 0) { lastMoveDirection.current = { x: moveX, y: moveY }; }
-          x += moveX * PLAYER_SPEED; y += moveY * PLAYER_SPEED;
-        }
-        x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, x));
-        y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, y));
-        return { pos: { x, y }, health, knockback: newKnockback };
+          return newPlayer;
       });
 
       setEnemy(prev => {
         if (!prev) return null;
-        let { pos, health, knockback, type, lastAttackTime } = prev;
-        let x = pos.x, y = pos.y;
-        x += knockback.vx; y += knockback.vy;
-        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
-        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
-        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
-        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
-          if (enemyDirectionChangeCounter.current <= 0) {
-            const angle = Math.random() * 2 * Math.PI;
-            enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
-            enemyDirectionChangeCounter.current = ENEMY_DIRECTION_CHANGE_INTERVAL;
-          } else {
-            enemyDirectionChangeCounter.current--;
-          }
-          x += enemyDirection.current.x * ENEMY_SPEED; y += enemyDirection.current.y * ENEMY_SPEED;
-          if (x <= 0 || x >= GAME_WIDTH - ENEMY_SIZE) enemyDirection.current.x *= -1;
-          if (y <= 0 || y >= GAME_HEIGHT - ENEMY_SIZE) enemyDirection.current.y *= -1;
-        }
-        x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
-        y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-        let newLastAttackTime = lastAttackTime;
-        if (type === 'water' && Date.now() - (lastAttackTime || 0) > WATER_ENEMY_ATTACK_INTERVAL) {
-            newLastAttackTime = Date.now();
-            const projectileDirection = { ...enemyDirection.current };
-            const enemyCenter = { x: x + ENEMY_SIZE / 2, y: y + ENEMY_SIZE / 2 };
-            const newProjectile: WaterProjectile = { id: Math.random(), pos: enemyCenter, direction: projectileDirection, width: 0, height: PROJECTILE_THICKNESS, speed: PROJECTILE_SPEED, createdAt: Date.now() };
-            setProjectiles(currentProjectiles => [...currentProjectiles, newProjectile]);
-        }
-        return { pos: {x, y}, health, knockback: newKnockback, type, lastAttackTime: newLastAttackTime };
+        return updateEnemy({
+            enemy: prev, enemyDirection, enemyDirectionChangeCounter, setProjectiles, GAME_WIDTH, GAME_HEIGHT
+        });
       });
 
       setAlly(prevAlly => {
         if (!prevAlly || !enemy) return prevAlly;
-        let { pos, health, knockback, spawnedAt } = prevAlly;
-        let x = pos.x, y = pos.y;
-        x += knockback.vx; y += knockback.vy;
-        const newKnockback = { vx: knockback.vx * KNOCKBACK_DECAY, vy: knockback.vy * KNOCKBACK_DECAY };
-        if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
-        if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
-        if (newKnockback.vx === 0 && newKnockback.vy === 0) {
-          const dx = enemy.pos.x - x;
-          const dy = enemy.pos.y - y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance > 1) {
-              const moveX = (dx / distance) * ALLY_SPEED; const moveY = (dy / distance) * ALLY_SPEED;
-              x += moveX; y += moveY;
-          }
-        }
-        x = Math.max(0, Math.min(GAME_WIDTH - ALLY_SIZE, x)); y = Math.max(0, Math.min(GAME_HEIGHT - ALLY_SIZE, y));
-        return { pos: {x, y}, health, knockback: newKnockback, spawnedAt };
+        return updateAlly({
+            ally: prevAlly, enemy, GAME_WIDTH, GAME_HEIGHT
+        });
       });
 
-      setProjectiles(prevProjectiles =>
-        prevProjectiles.map(p => {
-          const age = Date.now() - p.createdAt;
-          const growthRatio = Math.min(1, age / PROJECTILE_GROWTH_DURATION);
-          const length = PROJECTILE_MAX_LENGTH * growthRatio;
-          let newPos = p.pos;
-          if (age > PROJECTILE_GROWTH_DURATION) {
-            newPos = { x: p.pos.x + p.direction.x * p.speed, y: p.pos.y + p.direction.y * p.speed };
-          }
-          return { ...p, pos: newPos, width: length };
-        }).filter(p => p.pos.x < GAME_WIDTH + p.width && p.pos.x > -p.width && p.pos.y < GAME_HEIGHT + p.width && p.pos.y > -p.width)
-      );
+      setProjectiles(prev => updateProjectiles(prev, GAME_WIDTH, GAME_HEIGHT));
+      
       animationFrameId.current = requestAnimationFrame(loop);
     };
     animationFrameId.current = requestAnimationFrame(loop);
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy, touchMoveTarget]);
 
+  // Game interactions and rules
   useEffect(() => {
-    if (player.health <= 0) { resetGame(); return; }
+    // These need to be checked because they can be null during the first render cycles
     if (!enemy || !collectiblePos) return;
 
-    if (ally && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...ally.pos, size: ALLY_SIZE }) && Date.now() - ally.spawnedAt > ALLY_RECALL_COOLDOWN) {
-        setAllyData({ health: ally.health });
-        setAlly(null); return;
-    }
-
-    if (trap && checkCollision({ ...enemy.pos, size: ENEMY_SIZE }, { ...trap.pos, size: TRAP_SIZE })) {
-      setTrapXp(s => s + 1);
-      if (!allyAwarded) { setAllyAwarded(true); setAllyData({ health: allyMaxHealth }); }
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
-      setTrap(null); return;
-    }
-
-    if (checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
-      if (!playerHitCooldown.current) {
-        playerHitCooldown.current = true;
-        const dx = enemy.pos.x - player.pos.x, dy = enemy.pos.y - player.pos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        const knockbackVX = (dx / distance) * KNOCKBACK_FORCE, knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
-        setPlayer(p => ({ ...p, health: p.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } }));
-        setEnemy(e => e ? { ...e, health: e.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } } : null);
-        setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
-      }
-    }
-
-    if (!playerHitCooldown.current && projectiles.length > 0) {
-      const playerCircle = { center: { x: player.pos.x + PLAYER_SIZE / 2, y: player.pos.y + PLAYER_SIZE / 2 }, radius: PLAYER_SIZE / 2 };
-      projectiles.forEach(p => {
-        const projectileCenter = { x: p.pos.x + (p.direction.x * p.width) / 2 - (p.direction.x * p.height) / 2, y: p.pos.y + (p.direction.y * p.width) / 2 - (p.direction.y * p.height) / 2 };
-        const projectileRadius = p.width / 2;
-        if (checkCircleCollision({ center: playerCircle.center, radius: playerCircle.radius }, { center: projectileCenter, radius: projectileRadius })) {
-          playerHitCooldown.current = true;
-          const knockbackVX = p.direction.x * KNOCKBACK_FORCE * 0.5, knockbackVY = p.direction.y * KNOCKBACK_FORCE * 0.5;
-          setPlayer(pl => ({ ...pl, health: pl.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } }));
-          setProjectiles(prev => prev.filter(proj => proj.id !== p.id));
-          setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
-        }
-      });
-    }
-
-    if (ally && checkCollision({ ...ally.pos, size: ALLY_SIZE }, { ...enemy.pos, size: ENEMY_SIZE })) {
-      if (!allyHitCooldown.current) {
-        allyHitCooldown.current = true;
-        const dx = enemy.pos.x - ally.pos.x, dy = enemy.pos.y - ally.pos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        const knockbackVX = (dx / distance) * KNOCKBACK_FORCE, knockbackVY = (dy / distance) * KNOCKBACK_FORCE;
-        setAlly(a => a ? { ...a, health: a.health - 1, knockback: { vx: -knockbackVX, vy: -knockbackVY } } : null);
-        setEnemy(e => e ? { ...e, health: e.health - attackLevel, knockback: { vx: knockbackVX, vy: knockbackVY } } : null);
-        setTimeout(() => { allyHitCooldown.current = false; }, HIT_COOLDOWN);
-      }
-    }
-
-    if (ally && ally.health <= 0) { setAllyData({ health: 0 }); setAlly(null); }
-    if (enemy.health <= 0) {
-      setAttackXp(xp => xp + 1);
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
-      return;
-    }
-
-    if (checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...collectiblePos, size: COLLECTIBLE_SIZE })) {
-      setTrapCount(s => s + 1);
-      setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
-    }
-    if (trap && checkCollision({ ...player.pos, size: PLAYER_SIZE }, { ...trap.pos, size: TRAP_SIZE }) && Date.now() - trap.placedAt > TRAP_PICKUP_COOLDOWN) {
-      setTrapCount(c => c + 1);
-      setTrap(null);
-    }
+    handleGameInteractions({
+        player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes,
+        setPlayer, setEnemy, setCollectiblePos, setTrap, setAlly, setProjectiles, setAllyData, setTrapXp, setAttackXp, setAllyAwarded, setTrapCount,
+        playerHitCooldown, allyHitCooldown,
+        GAME_WIDTH, GAME_HEIGHT,
+        resetGame,
+    });
   }, [player, enemy, collectiblePos, trap, ally, projectiles, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes]);
 
   useEffect(() => {
