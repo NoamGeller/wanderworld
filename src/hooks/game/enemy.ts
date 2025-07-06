@@ -19,6 +19,7 @@ export function updateEnemy({
 }): Character {
     let { pos, health, knockback, type, lastAttackTime } = enemy;
     let x = pos.x, y = pos.y;
+    let newLastAttackTime = lastAttackTime;
 
     // Apply knockback
     x += knockback.vx;
@@ -27,8 +28,26 @@ export function updateEnemy({
     if (Math.abs(newKnockback.vx) < 0.1) newKnockback.vx = 0;
     if (Math.abs(newKnockback.vy) < 0.1) newKnockback.vy = 0;
 
-    // Apply AI movement if not being knocked back
-    if (newKnockback.vx === 0 && newKnockback.vy === 0) {
+    // Water enemy attack logic: check if it's time to fire
+    if (type === 'water' && Date.now() - (lastAttackTime || 0) > WATER_ENEMY_ATTACK_INTERVAL) {
+        newLastAttackTime = Date.now();
+        const projectileDirection = { ...enemyDirection.current };
+        // If the enemy is not moving, give it a random direction for the projectile
+        if (projectileDirection.x === 0 && projectileDirection.y === 0) {
+            const angle = Math.random() * 2 * Math.PI;
+            projectileDirection.x = Math.cos(angle);
+            projectileDirection.y = Math.sin(angle);
+        }
+        const enemyCenter = { x: x + ENEMY_SIZE / 2, y: y + ENEMY_SIZE / 2 };
+        const newProjectile: WaterProjectile = { id: Math.random(), pos: enemyCenter, direction: projectileDirection, width: 0, height: PROJECTILE_THICKNESS, speed: PROJECTILE_SPEED, createdAt: Date.now() };
+        setProjectiles(currentProjectiles => [...currentProjectiles, newProjectile]);
+    }
+    
+    // Determine if the enemy is in the "shooting" animation phase
+    const isShooting = type === 'water' && Date.now() - (newLastAttackTime || 0) < PROJECTILE_GROWTH_DURATION;
+
+    // Apply AI movement if not being knocked back and not shooting
+    if (newKnockback.vx === 0 && newKnockback.vy === 0 && !isShooting) {
         if (enemyDirectionChangeCounter.current <= 0) {
             const angle = Math.random() * 2 * Math.PI;
             enemyDirection.current = { x: Math.cos(angle), y: Math.sin(angle) };
@@ -48,16 +67,6 @@ export function updateEnemy({
     // Boundary checks
     x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
     y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-    
-    // Water enemy attack
-    let newLastAttackTime = lastAttackTime;
-    if (type === 'water' && Date.now() - (lastAttackTime || 0) > WATER_ENEMY_ATTACK_INTERVAL) {
-        newLastAttackTime = Date.now();
-        const projectileDirection = { ...enemyDirection.current };
-        const enemyCenter = { x: x + ENEMY_SIZE / 2, y: y + ENEMY_SIZE / 2 };
-        const newProjectile: WaterProjectile = { id: Math.random(), pos: enemyCenter, direction: projectileDirection, width: 0, height: PROJECTILE_THICKNESS, speed: PROJECTILE_SPEED, createdAt: Date.now() };
-        setProjectiles(currentProjectiles => [...currentProjectiles, newProjectile]);
-    }
     
     return { pos: {x, y}, health, knockback: newKnockback, type, lastAttackTime: newLastAttackTime };
 }

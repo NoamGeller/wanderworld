@@ -86,7 +86,7 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     setAllyMaxHealth(HEALTH_START);
 
     if (isMobile !== undefined) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: Date.now() });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile, enabledEnemyTypes]);
@@ -164,8 +164,8 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     const touchY = touch.clientY - rect.top;
     const dx = touchX - joystickCenter.x;
     const dy = touchY - joystickCenter.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
     const maxDistance = 50;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance > maxDistance) {
       const x = (dx / distance) * maxDistance;
       const y = (dy / distance) * maxDistance;
@@ -305,7 +305,7 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: Date.now() });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
