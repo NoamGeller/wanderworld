@@ -22,6 +22,13 @@ export const KNOCKBACK_DECAY = 0.9;
 export const ALLY_REGEN_INTERVAL = 2000; // in milliseconds
 export const ALLY_RECALL_COOLDOWN = 1000; // in milliseconds
 
+// Water Enemy Projectile Constants
+export const WATER_ENEMY_ATTACK_INTERVAL = 2000; // in milliseconds
+export const PROJECTILE_SPEED = 3;
+export const PROJECTILE_GROWTH_DURATION = 300; // in milliseconds
+export const PROJECTILE_MAX_LENGTH = 50;
+export const PROJECTILE_THICKNESS = 4;
+
 // Mobile Controls Constants
 export const JOYSTICK_AREA_HEIGHT = 120;
 export const JOYSTICK_BASE_RADIUS = 50;

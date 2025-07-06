@@ -25,9 +25,14 @@ import {
     KNOCKBACK_DECAY,
     ALLY_REGEN_INTERVAL,
     ALLY_RECALL_COOLDOWN,
+    WATER_ENEMY_ATTACK_INTERVAL,
+    PROJECTILE_SPEED,
+    PROJECTILE_GROWTH_DURATION,
+    PROJECTILE_MAX_LENGTH,
+    PROJECTILE_THICKNESS,
 } from './constants';
-import type { Position, Character, Trap, Ally, EnemyType } from './types';
-import { checkCollision, getRandomPosition, getRandomEnemyType } from './utils';
+import type { Position, Character, Trap, Ally, EnemyType, WaterProjectile } from './types';
+import { checkCollision, getRandomPosition, getRandomEnemyType, checkCircleCollision } from './utils';
 import { Cog } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SettingsMenu } from './settings-menu';
@@ -38,6 +43,7 @@ import { AllyComponent } from './ally-component';
 import { CollectibleComponent } from './collectible-component';
 import { TrapComponent } from './trap-component';
 import { MobileControls } from './mobile-controls';
+import { ProjectileComponent } from './projectile-component';
 
 export function GameBoard() {
   const isMobile = useIsMobile();
@@ -59,6 +65,7 @@ export function GameBoard() {
   const [trap, setTrap] = useState<Trap | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [enabledEnemyTypes, setEnabledEnemyTypes] = useState<EnemyType[]>(['fire', 'water', 'earth', 'air']);
+  const [projectiles, setProjectiles] = useState<WaterProjectile[]>([]);
 
   // Ally State
   const [ally, setAlly] = useState<Ally | null>(null);
@@ -100,6 +107,7 @@ export function GameBoard() {
     setTrapCount(0);
     setTrap(null);
     setPlayer({ pos: { x: GAME_WIDTH / 2 - PLAYER_SIZE / 2, y: GAME_HEIGHT / 2 - PLAYER_SIZE / 2 }, health: HEALTH_START, knockback: { vx: 0, vy: 0 } });
+    setProjectiles([]);
 
     // Reset Ally State
     setAlly(null);
@@ -109,7 +117,7 @@ export function GameBoard() {
 
     // Initial Spawn
     if (isMobile !== undefined) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
     }
   }, [GAME_WIDTH, GAME_HEIGHT, isMobile, enabledEnemyTypes]);
@@ -349,7 +357,7 @@ export function GameBoard() {
 
       setEnemy(prev => {
         if (!prev) return null;
-        let { pos, health, knockback, type } = prev;
+        let { pos, health, knockback, type, lastAttackTime } = prev;
         let x = pos.x;
         let y = pos.y;
 
@@ -376,7 +384,25 @@ export function GameBoard() {
 
         x = Math.max(0, Math.min(GAME_WIDTH - ENEMY_SIZE, x));
         y = Math.max(0, Math.min(GAME_HEIGHT - ENEMY_SIZE, y));
-        return { pos: {x, y}, health, knockback: newKnockback, type };
+
+        let newLastAttackTime = lastAttackTime;
+        if (type === 'water' && Date.now() - (lastAttackTime || 0) > WATER_ENEMY_ATTACK_INTERVAL) {
+            newLastAttackTime = Date.now();
+            const projectileDirection = { ...enemyDirection.current };
+            const enemyCenter = { x: x + ENEMY_SIZE / 2, y: y + ENEMY_SIZE / 2 };
+            const newProjectile: WaterProjectile = {
+                id: Math.random(),
+                pos: enemyCenter,
+                direction: projectileDirection,
+                width: 0,
+                height: PROJECTILE_THICKNESS,
+                speed: PROJECTILE_SPEED,
+                createdAt: Date.now(),
+            };
+            setProjectiles(currentProjectiles => [...currentProjectiles, newProjectile]);
+        }
+
+        return { pos: {x, y}, health, knockback: newKnockback, type, lastAttackTime: newLastAttackTime };
       });
 
       setAlly(prevAlly => {
@@ -410,6 +436,31 @@ export function GameBoard() {
         return { pos: {x, y}, health, knockback: newKnockback, spawnedAt };
       });
 
+      setProjectiles(prevProjectiles =>
+        prevProjectiles.map(p => {
+          const age = Date.now() - p.createdAt;
+          const growthRatio = Math.min(1, age / PROJECTILE_GROWTH_DURATION);
+          const length = PROJECTILE_MAX_LENGTH * growthRatio;
+
+          let newPos = p.pos;
+          if (age > PROJECTILE_GROWTH_DURATION) {
+            newPos = {
+              x: p.pos.x + p.direction.x * p.speed,
+              y: p.pos.y + p.direction.y * p.speed,
+            };
+          }
+          
+          return {
+            ...p,
+            pos: newPos,
+            width: length,
+          };
+        }).filter(p => 
+          p.pos.x < GAME_WIDTH + p.width && p.pos.x > -p.width &&
+          p.pos.y < GAME_HEIGHT + p.width && p.pos.y > -p.width
+        )
+      );
+
       animationFrameId.current = requestAnimationFrame(loop);
     };
     animationFrameId.current = requestAnimationFrame(loop);
@@ -442,7 +493,7 @@ export function GameBoard() {
         setAllyAwarded(true);
         setAllyData({ health: allyMaxHealth });
       }
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
       setTrap(null);
       return;
     }
@@ -465,6 +516,34 @@ export function GameBoard() {
         });
         setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
       }
+    }
+
+    // Player vs Projectile combat
+    if (!playerHitCooldown.current && projectiles.length > 0) {
+      const playerCircle = {
+        center: { x: player.pos.x + PLAYER_SIZE / 2, y: player.pos.y + PLAYER_SIZE / 2 },
+        radius: PLAYER_SIZE / 2,
+      };
+
+      projectiles.forEach(p => {
+        const projectileCenter = {
+          x: p.pos.x + (p.direction.x * p.width) / 2 - (p.direction.x * p.height) / 2,
+          y: p.pos.y + (p.direction.y * p.width) / 2 - (p.direction.y * p.height) / 2,
+        };
+        const projectileRadius = p.width / 2;
+
+        if (checkCircleCollision({ center: playerCircle.center, radius: playerCircle.radius }, { center: projectileCenter, radius: projectileRadius })) {
+          playerHitCooldown.current = true;
+          
+          const knockbackVX = p.direction.x * KNOCKBACK_FORCE * 0.5;
+          const knockbackVY = p.direction.y * KNOCKBACK_FORCE * 0.5;
+
+          setPlayer(pl => ({ ...pl, health: pl.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } }));
+          setProjectiles(prev => prev.filter(proj => proj.id !== p.id));
+          
+          setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
+        }
+      });
     }
 
     // Ally vs Enemy combat
@@ -499,7 +578,7 @@ export function GameBoard() {
     }
     if (enemy.health <= 0) {
       setAttackXp(xp => xp + 1);
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
       return;
     }
 
@@ -512,7 +591,7 @@ export function GameBoard() {
       setTrapCount(c => c + 1);
       setTrap(null);
     }
-  }, [player, enemy, collectiblePos, trap, ally, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes]);
+  }, [player, enemy, collectiblePos, trap, ally, projectiles, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes]);
 
   // Ally health regeneration
   useEffect(() => {
@@ -540,7 +619,7 @@ export function GameBoard() {
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
-      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes) });
+      setEnemy({ pos: getRandomPosition(ENEMY_SIZE, GAME_WIDTH, GAME_HEIGHT), health: HEALTH_START, knockback: { vx: 0, vy: 0 }, type: getRandomEnemyType(enabledEnemyTypes), lastAttackTime: 0 });
     }
     if (collectiblePos === null) {
       setCollectiblePos(getRandomPosition(COLLECTIBLE_SIZE, GAME_WIDTH, GAME_HEIGHT));
@@ -583,6 +662,7 @@ export function GameBoard() {
           {collectiblePos && <CollectibleComponent position={collectiblePos} />}
           {trap && <TrapComponent position={trap.pos} />}
           {ally && <AllyComponent ally={ally} attackLevel={attackLevel} />}
+          {projectiles.map(p => <ProjectileComponent key={p.id} projectile={p} />)}
         </div>
          <SettingsMenu
             open={isSettingsOpen}

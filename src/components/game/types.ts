@@ -16,6 +16,7 @@ export type Character = {
   health: number;
   knockback: Knockback;
   type?: EnemyType;
+  lastAttackTime?: number;
 };
 
 export type Trap = {
@@ -25,4 +26,14 @@ export type Trap = {
 
 export type Ally = Character & {
     spawnedAt: number;
+};
+
+export type WaterProjectile = {
+  id: number;
+  pos: Position;
+  direction: Position;
+  width: number;
+  height: number;
+  speed: number;
+  createdAt: number;
 };

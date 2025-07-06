@@ -11,6 +11,18 @@ export const checkCollision = (rect1: Position & { size: number }, rect2: Positi
   );
 };
 
+// Circle-based collision for more dynamic checks
+export const checkCircleCollision = (
+  circle1: { center: Position; radius: number },
+  circle2: { center: Position; radius: number }
+) => {
+  const dx = circle1.center.x - circle2.center.x;
+  const dy = circle1.center.y - circle2.center.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  return distance < circle1.radius + circle2.radius;
+};
+
+
 // Helper function to get a random position
 export const getRandomPosition = (size: number, width: number, height: number): Position => {
   return {
