@@ -256,7 +256,14 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
       setEnemy(prev => {
         if (!prev) return null;
         return updateEnemy({
-            enemy: prev, enemyDirection, enemyDirectionChangeCounter, setProjectiles, GAME_WIDTH, GAME_HEIGHT
+            enemy: prev,
+            player,
+            ally,
+            enemyDirection,
+            enemyDirectionChangeCounter,
+            setProjectiles,
+            GAME_WIDTH,
+            GAME_HEIGHT
         });
       });
 
@@ -273,7 +280,7 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     };
     animationFrameId.current = requestAnimationFrame(loop);
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy, touchMoveTarget]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy, touchMoveTarget, player, ally]);
 
   // Game interactions and rules
   useEffect(() => {

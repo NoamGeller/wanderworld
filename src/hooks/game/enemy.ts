@@ -1,9 +1,11 @@
 
-import type { Character, Position, WaterProjectile } from '@/components/game/types';
+import type { Ally, Character, Position, WaterProjectile } from '@/components/game/types';
 import { ENEMY_SIZE, ENEMY_SPEED, ENEMY_DIRECTION_CHANGE_INTERVAL, KNOCKBACK_DECAY, WATER_ENEMY_ATTACK_INTERVAL, PROJECTILE_SPEED, PROJECTILE_THICKNESS, PROJECTILE_GROWTH_DURATION, PROJECTILE_MAX_LENGTH } from '@/components/game/constants';
 
 export function updateEnemy({
     enemy,
+    player,
+    ally,
     enemyDirection,
     enemyDirectionChangeCounter,
     setProjectiles,
@@ -11,6 +13,8 @@ export function updateEnemy({
     GAME_HEIGHT,
 }: {
     enemy: Character;
+    player: Character;
+    ally: Ally | null;
     enemyDirection: React.MutableRefObject<Position>;
     enemyDirectionChangeCounter: React.MutableRefObject<number>;
     setProjectiles: React.Dispatch<React.SetStateAction<WaterProjectile[]>>;
@@ -31,13 +35,20 @@ export function updateEnemy({
     // Water enemy attack logic: check if it's time to fire
     if (type === 'water' && Date.now() - (lastAttackTime || 0) > WATER_ENEMY_ATTACK_INTERVAL) {
         newLastAttackTime = Date.now();
-        const projectileDirection = { ...enemyDirection.current };
-        // If the enemy is not moving, give it a random direction for the projectile
-        if (projectileDirection.x === 0 && projectileDirection.y === 0) {
-            const angle = Math.random() * 2 * Math.PI;
-            projectileDirection.x = Math.cos(angle);
-            projectileDirection.y = Math.sin(angle);
+
+        // Choose a target: player or ally (if ally exists)
+        const targets = [player];
+        if (ally) {
+            targets.push(ally);
         }
+        const target = targets[Math.floor(Math.random() * targets.length)];
+
+        // Calculate direction to target
+        const dx = target.pos.x - x;
+        const dy = target.pos.y - y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        const projectileDirection = { x: dx / distance, y: dy / distance };
+        
         const enemyCenter = { x: x + ENEMY_SIZE / 2, y: y + ENEMY_SIZE / 2 };
         const newProjectile: WaterProjectile = { id: Math.random(), pos: enemyCenter, direction: projectileDirection, width: 0, height: PROJECTILE_THICKNESS, speed: PROJECTILE_SPEED, createdAt: Date.now() };
         setProjectiles(currentProjectiles => [...currentProjectiles, newProjectile]);
