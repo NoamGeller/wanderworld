@@ -95,7 +95,7 @@ export function handleGameInteractions({
     // Projectile-Player collision
     if (!playerHitCooldown.current && projectiles.length > 0) {
         const playerCircle = { center: { x: player.pos.x + PLAYER_SIZE / 2, y: player.pos.y + PLAYER_SIZE / 2 }, radius: PLAYER_SIZE / 2 };
-        projectiles.forEach(p => {
+        for (const p of projectiles) {
             const projectileCenter = { x: p.pos.x + (p.direction.x * p.width) / 2 - (p.direction.x * p.height) / 2, y: p.pos.y + (p.direction.y * p.width) / 2 - (p.direction.y * p.height) / 2 };
             const projectileRadius = p.width / 2;
 
@@ -106,8 +106,9 @@ export function handleGameInteractions({
                 setPlayer(pl => ({ ...pl, health: pl.health - 1, knockback: { vx: knockbackVX, vy: knockbackVY } }));
                 setProjectiles(prev => prev.filter(proj => proj.id !== p.id));
                 setTimeout(() => { playerHitCooldown.current = false; }, HIT_COOLDOWN);
+                break; // Exit loop after first hit
             }
-        });
+        }
     }
 
     // Ally-Enemy collision
