@@ -171,6 +171,8 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     const rect = joystickAreaRef.current.getBoundingClientRect();
     const touchX = touch.clientX - rect.left;
     const touchY = touch.clientY - rect.top;
+    const dx = touchX - joystickCenter.x;
+    const dy = touchY - joystickCenter.y;
     const maxDistance = 50;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance > maxDistance) {
@@ -381,3 +383,5 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     handleSpawnAlly,
   };
 }
+
+    
