@@ -70,14 +70,6 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
   const gameAreaTouchId = useRef<number | null>(null);
   const gameAreaRef = useRef<HTMLDivElement>(null);
   
-  // Create a ref to hold all state that the game loop needs.
-  // This prevents the useEffect from re-running every frame.
-  const gameStateRef = useRef({ player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget });
-
-  useEffect(() => {
-    gameStateRef.current = { player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget };
-  }, [player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget]);
-
 
   const resetGame = useCallback(() => {
     setTrapXp(0);
@@ -251,66 +243,87 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
   // Main game loop
   useEffect(() => {
     const loop = () => {
-        setPlayer(prev => {
-            const { newPlayer, lastMoveDirection: newLastMoveDirection } = updatePlayer({
-                player: prev,
-                keysPressed, 
-                playerDirection, 
-                touchMoveTarget: gameStateRef.current.touchMoveTarget, 
-                isMobile, 
-                GAME_WIDTH, 
-                GAME_HEIGHT
-            });
-            if (newLastMoveDirection) {
-                lastMoveDirection.current = newLastMoveDirection;
-            }
-            return newPlayer;
-        });
+        // Capture a snapshot of the current state from React state
+        const currentState = { player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget };
 
-        setEnemy(prev => {
-            if (!prev) return null;
-            return updateEnemy({
-                enemy: prev,
-                player: gameStateRef.current.player,
-                ally: gameStateRef.current.ally,
-                enemyDirection,
-                enemyDirectionChangeCounter,
-                setProjectiles,
-                GAME_WIDTH,
-                GAME_HEIGHT
-            });
-        });
+        // Ensure the game is initialized before running logic
+        if (!currentState.enemy || !currentState.collectiblePos) {
+            animationFrameId.current = requestAnimationFrame(loop);
+            return;
+        }
 
-        setAlly(prevAlly => {
-            if (!prevAlly || !gameStateRef.current.enemy) return prevAlly;
-            return updateAlly({
-                ally: prevAlly, 
-                enemy: gameStateRef.current.enemy, 
-                GAME_WIDTH, 
-                GAME_HEIGHT
-            });
+        // --- UPDATE PHASE ---
+        const playerUpdate = updatePlayer({
+            player: currentState.player,
+            keysPressed, playerDirection, touchMoveTarget, isMobile, GAME_WIDTH, GAME_HEIGHT
+        });
+        if (playerUpdate.lastMoveDirection) {
+            lastMoveDirection.current = playerUpdate.lastMoveDirection;
+        }
+
+        let newEnemyProjectiles = [...currentState.projectiles];
+        const enemyUpdate = updateEnemy({
+            enemy: currentState.enemy,
+            player: playerUpdate.newPlayer,
+            ally: currentState.ally,
+            enemyDirection,
+            enemyDirectionChangeCounter,
+            setProjectiles: (updater) => {
+                if (typeof updater === 'function') {
+                    newEnemyProjectiles = updater(newEnemyProjectiles);
+                } else {
+                    newEnemyProjectiles = updater;
+                }
+            },
+            GAME_WIDTH, GAME_HEIGHT
         });
         
-        setProjectiles(prev => updateProjectiles(prev, GAME_WIDTH, GAME_HEIGHT));
+        const allyUpdate = currentState.ally ? updateAlly({
+            ally: currentState.ally,
+            enemy: enemyUpdate,
+            GAME_WIDTH, GAME_HEIGHT
+        }) : null;
+        
+        const projectileUpdate = updateProjectiles(newEnemyProjectiles, GAME_WIDTH, GAME_HEIGHT);
+        
+        // --- INTERACTION PHASE ---
+        const interactionResult = handleGameInteractions({
+            player: playerUpdate.newPlayer,
+            enemy: enemyUpdate,
+            collectiblePos: currentState.collectiblePos,
+            trap: currentState.trap,
+            ally: allyUpdate,
+            projectiles: projectileUpdate,
+            allyAwarded: currentState.allyAwarded,
+            attackLevel, allyMaxHealth, enabledEnemyTypes,
+            playerHitCooldown, allyHitCooldown,
+            GAME_WIDTH, GAME_HEIGHT
+        });
 
-        // Interactions are now called inside the loop, using the consistent state from the ref.
-        if (gameStateRef.current.enemy && gameStateRef.current.collectiblePos) {
-            handleGameInteractions({
-                player: gameStateRef.current.player,
-                enemy: gameStateRef.current.enemy,
-                collectiblePos: gameStateRef.current.collectiblePos,
-                trap: gameStateRef.current.trap,
-                ally: gameStateRef.current.ally,
-                projectiles: gameStateRef.current.projectiles,
-                allyAwarded: gameStateRef.current.allyAwarded,
-                attackLevel: gameStateRef.current.attackLevel,
-                allyMaxHealth: gameStateRef.current.allyMaxHealth,
-                enabledEnemyTypes: gameStateRef.current.enabledEnemyTypes,
-                setPlayer, setEnemy, setCollectiblePos, setTrap, setAlly, setProjectiles, setAllyData, setTrapXp, setAttackXp, setAllyAwarded, setTrapCount,
-                playerHitCooldown, allyHitCooldown,
-                GAME_WIDTH, GAME_HEIGHT,
-                resetGame,
-            });
+        // --- COMMIT PHASE ---
+        if (interactionResult.shouldReset) {
+            resetGame();
+        } else {
+            setPlayer(interactionResult.nextPlayer);
+            setEnemy(interactionResult.nextEnemy);
+            setCollectiblePos(interactionResult.nextCollectiblePos);
+            setTrap(interactionResult.nextTrap);
+            setAlly(interactionResult.nextAlly);
+            setProjectiles(interactionResult.nextProjectiles);
+            setAllyAwarded(interactionResult.allyAwarded);
+            
+            if (interactionResult.nextAllyData) {
+                setAllyData(interactionResult.nextAllyData);
+            }
+            if (interactionResult.trapXpGained > 0) {
+                setTrapXp(xp => xp + interactionResult.trapXpGained);
+            }
+            if (interactionResult.attackXpGained > 0) {
+                setAttackXp(xp => xp + interactionResult.attackXpGained);
+            }
+            if (interactionResult.trapCountGained > 0) {
+                setTrapCount(c => c + interactionResult.trapCountGained);
+            }
         }
         
         animationFrameId.current = requestAnimationFrame(loop);
@@ -323,7 +336,7 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
             cancelAnimationFrame(animationFrameId.current);
         }
     };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, resetGame]);
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, resetGame, player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget]);
 
 
   // Ally regeneration logic
@@ -383,5 +396,3 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     handleSpawnAlly,
   };
 }
-
-    
