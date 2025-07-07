@@ -88,10 +88,15 @@ export default {
             height: '0',
           },
         },
+        'droplet-fall': {
+          'from': { transform: 'translateY(0)', opacity: '0.7' },
+          'to': { transform: 'translateY(15px)', opacity: '0' },
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'droplet-fall': 'droplet-fall 0.7s ease-out infinite',
       },
     },
   },
