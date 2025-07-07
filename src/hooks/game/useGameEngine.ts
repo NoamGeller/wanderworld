@@ -69,6 +69,15 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
   const [touchMoveTarget, setTouchMoveTarget] = useState<Position | null>(null);
   const gameAreaTouchId = useRef<number | null>(null);
   const gameAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Create a ref to hold all state that the game loop needs.
+  // This prevents the useEffect from re-running every frame.
+  const gameStateRef = useRef({ player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget });
+
+  useEffect(() => {
+    gameStateRef.current = { player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget };
+  }, [player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes, touchMoveTarget]);
+
 
   const resetGame = useCallback(() => {
     setTrapXp(0);
@@ -162,8 +171,6 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     const rect = joystickAreaRef.current.getBoundingClientRect();
     const touchX = touch.clientX - rect.left;
     const touchY = touch.clientY - rect.top;
-    const dx = touchX - joystickCenter.x;
-    const dy = touchY - joystickCenter.y;
     const maxDistance = 50;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance > maxDistance) {
@@ -242,60 +249,82 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
   // Main game loop
   useEffect(() => {
     const loop = () => {
-      setPlayer(prev => {
-          const { newPlayer, lastMoveDirection: newLastMoveDirection } = updatePlayer({
-              player: prev,
-              keysPressed, playerDirection, touchMoveTarget, isMobile, GAME_WIDTH, GAME_HEIGHT
-          });
-          if (newLastMoveDirection) {
-              lastMoveDirection.current = newLastMoveDirection;
-          }
-          return newPlayer;
-      });
-
-      setEnemy(prev => {
-        if (!prev) return null;
-        return updateEnemy({
-            enemy: prev,
-            player,
-            ally,
-            enemyDirection,
-            enemyDirectionChangeCounter,
-            setProjectiles,
-            GAME_WIDTH,
-            GAME_HEIGHT
+        setPlayer(prev => {
+            const { newPlayer, lastMoveDirection: newLastMoveDirection } = updatePlayer({
+                player: prev,
+                keysPressed, 
+                playerDirection, 
+                touchMoveTarget: gameStateRef.current.touchMoveTarget, 
+                isMobile, 
+                GAME_WIDTH, 
+                GAME_HEIGHT
+            });
+            if (newLastMoveDirection) {
+                lastMoveDirection.current = newLastMoveDirection;
+            }
+            return newPlayer;
         });
-      });
 
-      setAlly(prevAlly => {
-        if (!prevAlly || !enemy) return prevAlly;
-        return updateAlly({
-            ally: prevAlly, enemy, GAME_WIDTH, GAME_HEIGHT
+        setEnemy(prev => {
+            if (!prev) return null;
+            return updateEnemy({
+                enemy: prev,
+                player: gameStateRef.current.player,
+                ally: gameStateRef.current.ally,
+                enemyDirection,
+                enemyDirectionChangeCounter,
+                setProjectiles,
+                GAME_WIDTH,
+                GAME_HEIGHT
+            });
         });
-      });
 
-      setProjectiles(prev => updateProjectiles(prev, GAME_WIDTH, GAME_HEIGHT));
-      
-      animationFrameId.current = requestAnimationFrame(loop);
+        setAlly(prevAlly => {
+            if (!prevAlly || !gameStateRef.current.enemy) return prevAlly;
+            return updateAlly({
+                ally: prevAlly, 
+                enemy: gameStateRef.current.enemy, 
+                GAME_WIDTH, 
+                GAME_HEIGHT
+            });
+        });
+        
+        setProjectiles(prev => updateProjectiles(prev, GAME_WIDTH, GAME_HEIGHT));
+
+        // Interactions are now called inside the loop, using the consistent state from the ref.
+        if (gameStateRef.current.enemy && gameStateRef.current.collectiblePos) {
+            handleGameInteractions({
+                player: gameStateRef.current.player,
+                enemy: gameStateRef.current.enemy,
+                collectiblePos: gameStateRef.current.collectiblePos,
+                trap: gameStateRef.current.trap,
+                ally: gameStateRef.current.ally,
+                projectiles: gameStateRef.current.projectiles,
+                allyAwarded: gameStateRef.current.allyAwarded,
+                attackLevel: gameStateRef.current.attackLevel,
+                allyMaxHealth: gameStateRef.current.allyMaxHealth,
+                enabledEnemyTypes: gameStateRef.current.enabledEnemyTypes,
+                setPlayer, setEnemy, setCollectiblePos, setTrap, setAlly, setProjectiles, setAllyData, setTrapXp, setAttackXp, setAllyAwarded, setTrapCount,
+                playerHitCooldown, allyHitCooldown,
+                GAME_WIDTH, GAME_HEIGHT,
+                resetGame,
+            });
+        }
+        
+        animationFrameId.current = requestAnimationFrame(loop);
     };
+
     animationFrameId.current = requestAnimationFrame(loop);
-    return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
-  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, enemy, touchMoveTarget, player, ally]);
 
-  // Game interactions and rules
-  useEffect(() => {
-    // These need to be checked because they can be null during the first render cycles
-    if (!enemy || !collectiblePos) return;
+    return () => { 
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+        }
+    };
+  }, [isMobile, GAME_WIDTH, GAME_HEIGHT, resetGame]);
 
-    handleGameInteractions({
-        player, enemy, collectiblePos, trap, ally, projectiles, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes,
-        setPlayer, setEnemy, setCollectiblePos, setTrap, setAlly, setProjectiles, setAllyData, setTrapXp, setAttackXp, setAllyAwarded, setTrapCount,
-        playerHitCooldown, allyHitCooldown,
-        GAME_WIDTH, GAME_HEIGHT,
-        resetGame,
-    });
-  }, [player, enemy, collectiblePos, trap, ally, projectiles, resetGame, GAME_WIDTH, GAME_HEIGHT, allyAwarded, attackLevel, allyMaxHealth, enabledEnemyTypes]);
 
+  // Ally regeneration logic
   useEffect(() => {
     if (ally || !allyData || allyData.health >= allyMaxHealth) return;
     const intervalId = setInterval(() => {
@@ -309,6 +338,7 @@ export function useGameEngine({ GAME_WIDTH, GAME_HEIGHT, isMobile }: GameEngineP
     return () => clearInterval(intervalId);
   }, [ally, allyData, allyMaxHealth]);
 
+  // Initial spawn logic
   useEffect(() => {
     if (isMobile === undefined) return;
     if (enemy === null) {
